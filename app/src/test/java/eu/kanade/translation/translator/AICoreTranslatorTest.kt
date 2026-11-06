@@ -162,4 +162,92 @@ class AICoreTranslatorTest {
         assertNull(AICoreTranslator.parseJsonArrayResponse("Just plain text with no array"))
         assertNull(AICoreTranslator.parseJsonArrayResponse("[unquoted, invalid json]"))
     }
+
+    @Test
+    fun `parseJsonArrayResponse handles unescaped literal newlines inside strings`() {
+        val raw = "[\"Baris satu\nBaris dua\", \"Teks normal\"]"
+        val parsed = AICoreTranslator.parseJsonArrayResponse(raw)
+
+        assertNotNull(parsed)
+        assertEquals(2, parsed!!.size)
+        assertEquals("Baris satu Baris dua", parsed[0])
+        assertEquals("Teks normal", parsed[1])
+    }
+
+    @Test
+    fun `parseJsonArrayResponse parses numbered lines fallback`() {
+        val raw = """
+            1. Hunter Sung Jin-Woo
+            2. Gerbang Dungeon Rank S
+            3. Hati-hati!
+        """.trimIndent()
+        val parsed = AICoreTranslator.parseJsonArrayResponse(raw, expectedCount = 3)
+
+        assertNotNull(parsed)
+        assertEquals(3, parsed!!.size)
+        assertEquals("Hunter Sung Jin-Woo", parsed[0])
+        assertEquals("Gerbang Dungeon Rank S", parsed[1])
+        assertEquals("Hati-hati!", parsed[2])
+    }
+
+    @Test
+    fun `normalizeOcrText handles hyphens, linebreaks, and collapses spaces`() {
+        val messy = "GERB-\nANG  DUNGEON\r\nRANK   S"
+        val normalized = AICoreTranslator.normalizeOcrText(messy)
+        assertEquals("GERBANG DUNGEON RANK S", normalized)
+    }
+
+    @Test
+    fun `smartMergeBlocks merges centered speech bubble lines`() {
+        // Top line
+        val top = TranslationBlock(
+            text = "ARE YOU",
+            translation = "",
+            width = 60f,
+            height = 20f,
+            x = 50f,
+            y = 100f,
+            symHeight = 16f,
+            symWidth = 10f,
+            angle = 0f,
+        )
+        // Middle line (centered around x=80, wider)
+        val mid = TranslationBlock(
+            text = "READY FOR-",
+            translation = "",
+            width = 90f,
+            height = 20f,
+            x = 35f,
+            y = 125f,
+            symHeight = 16f,
+            symWidth = 10f,
+            angle = 0f,
+        )
+        // Bottom line (centered around x=80)
+        val bot = TranslationBlock(
+            text = "THIS?",
+            translation = "",
+            width = 50f,
+            height = 20f,
+            x = 55f,
+            y = 150f,
+            symHeight = 16f,
+            symWidth = 10f,
+            angle = 0f,
+        )
+
+        val merged = eu.kanade.translation.ChapterTranslator.smartMergeBlocks(
+            blocks = listOf(top, bot, mid),
+            widthThreshold = 50,
+            xThreshold = 30,
+            yThreshold = 30,
+        )
+
+        assertEquals(1, merged.size)
+        assertEquals("ARE YOU READY FORTHIS?", merged[0].text)
+        assertEquals(35f, merged[0].x)
+        assertEquals(100f, merged[0].y)
+        assertEquals(90f, merged[0].width)
+        assertEquals(70f, merged[0].height)
+    }
 }

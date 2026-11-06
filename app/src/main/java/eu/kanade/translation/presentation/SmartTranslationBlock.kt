@@ -43,21 +43,25 @@ fun SmartTranslationBlock(
             .requiredSize(width, height),
     ) {
         val density = LocalDensity.current
+        val words = block.translation.split(Regex("\\s+")).filter { it.isNotBlank() }
+        val longestWord = words.maxByOrNull { it.length } ?: ""
+
         SubcomposeLayout { constraints ->
             val maxWidthPx = maxOf(1, with(density) { width.roundToPx() })
             val maxHeightPx = maxOf(1, with(density) { height.roundToPx() })
 
-            // Binary search for optimal font size
+            // Binary search for optimal font size (capped at 28sp for natural comic typography)
             var low = 1
-            var high = 100 // Initial upper bound
+            var high = 28
             var bestSize = low
 
             while (low <= high) {
-                val mid = ((low + high) / 2)
+                val mid = (low + high) / 2
                 val textLayoutResult = subcompose(mid.sp) {
                     Text(
                         text = block.translation,
                         fontSize = mid.sp,
+                        lineHeight = (mid * 1.15f).sp,
                         fontFamily = fontFamily,
                         color = Color.Black,
                         overflow = TextOverflow.Visible,
@@ -71,7 +75,23 @@ fun SmartTranslationBlock(
                     )
                 }[0].measure(Constraints(maxWidth = maxWidthPx))
 
-                if (textLayoutResult.height <= maxHeightPx) {
+                val wordFits = if (longestWord.isNotEmpty() && longestWord.length <= 12) {
+                    val wordLayoutResult = subcompose("word_${longestWord}_$mid") {
+                        Text(
+                            text = longestWord,
+                            fontSize = mid.sp,
+                            lineHeight = (mid * 1.15f).sp,
+                            fontFamily = fontFamily,
+                            softWrap = false,
+                            maxLines = 1,
+                        )
+                    }[0].measure(Constraints())
+                    wordLayoutResult.width <= maxWidthPx
+                } else {
+                    true
+                }
+
+                if (textLayoutResult.height <= maxHeightPx && wordFits) {
                     bestSize = mid
                     low = mid + 1
                 } else {
@@ -84,6 +104,7 @@ fun SmartTranslationBlock(
                 Text(
                     text = block.translation,
                     fontSize = bestSize.sp,
+                    lineHeight = (bestSize * 1.15f).sp,
                     fontFamily = fontFamily,
                     color = Color.Black,
                     softWrap = true,

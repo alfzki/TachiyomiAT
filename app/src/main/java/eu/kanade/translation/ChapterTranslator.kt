@@ -179,7 +179,33 @@ class ChapterTranslator(
 
     suspend fun queueChapter(manga: Manga, chapter: Chapter) {
         val source = sourceManager.get(manga.source) as? HttpSource ?: return
-        if (provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source) != null) return
+        val existingFile = provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source)
+        if (existingFile != null && existingFile.exists()) {
+            val isComplete = try {
+                if (existingFile.length() == 0L) {
+                    false
+                } else {
+                    val content = existingFile.openInputStream()?.bufferedReader()?.use { it.readText() }
+                    if (content.isNullOrBlank()) {
+                        false
+                    } else {
+                        val parsed = Json.decodeFromString<Map<String, PageTranslation>>(content)
+                        parsed.isNotEmpty() && parsed.values.any { page ->
+                            page.blocks.isNotEmpty() && page.blocks.any {
+                                it.translation.isNotBlank() && it.translation != it.text
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                false
+            }
+            if (isComplete) {
+                return
+            } else {
+                runCatching { existingFile.delete() }
+            }
+        }
         val existing = queueState.value.find { it.chapter.id == chapter.id }
         if (existing != null) {
             if (existing.status == Translation.State.ERROR) {
@@ -410,57 +436,6 @@ class ChapterTranslator(
         return translation
     }
 
-    private fun smartMergeBlocks(
-        blocks: List<TranslationBlock>,
-        widthThreshold: Int,
-        xThreshold: Int,
-        yThreshold: Int,
-    ): MutableList<TranslationBlock> {
-        if (blocks.isEmpty()) return mutableListOf()
-
-        val merged = mutableListOf<TranslationBlock>()
-        var current = blocks[0]
-        for (i in 1 until blocks.size) {
-            val next = blocks[i]
-            if (shouldMergeTextBlock(current, next, widthThreshold, xThreshold, yThreshold)) {
-                current = mergeTextBlock(current, next)
-            } else {
-                merged.add(current)
-                current = next
-            }
-        }
-        merged.add(current)
-        return merged
-    }
-
-    private fun shouldMergeTextBlock(
-        a: TranslationBlock,
-        b: TranslationBlock,
-        widthThreshold: Int,
-        xThreshold: Int,
-        yThreshold: Int,
-    ): Boolean {
-        val isWidthSimilar = (b.width < a.width) || (abs(a.width - b.width) < widthThreshold)
-        val isXClose = abs(a.x - b.x) < xThreshold
-        val isYClose = (b.y - (a.y + a.height)) < yThreshold
-        return isWidthSimilar && isXClose && isYClose
-    }
-
-    private fun mergeTextBlock(a: TranslationBlock, b: TranslationBlock): TranslationBlock {
-        val newX = kotlin.math.min(a.x, b.x)
-        val newY = a.y
-        val newWidth = kotlin.math.max(a.x + a.width, b.x + b.width) - newX
-        val newHeight = kotlin.math.max(a.y + a.height, b.y + b.height) - newY
-        return TranslationBlock(
-            a.text + " " + b.text,
-            a.translation + " " + b.translation,
-            newWidth,
-            newHeight,
-            newX, newY, a.symHeight,
-            a.symWidth, a.angle,
-        )
-    }
-
     private fun areAllTranslationsFinished(): Boolean {
         return queueState.value.none { it.status.value <= Translation.State.TRANSLATING.value }
     }
@@ -518,6 +493,123 @@ class ChapterTranslator(
                 }
             }
             emptyList()
+        }
+    }
+
+    companion object {
+        internal fun smartMergeBlocks(
+            blocks: List<TranslationBlock>,
+            widthThreshold: Int,
+            xThreshold: Int,
+            yThreshold: Int,
+        ): MutableList<TranslationBlock> {
+            if (blocks.size <= 1) return blocks.toMutableList()
+
+            var list = blocks.toMutableList()
+            list.sortBy { it.y }
+
+            do {
+                var mergedInPass = false
+                val nextPass = mutableListOf<TranslationBlock>()
+                val skip = BooleanArray(list.size)
+
+                for (i in 0 until list.size) {
+                    if (skip[i]) continue
+                    var current = list[i]
+                    for (j in (i + 1) until list.size) {
+                        if (skip[j]) continue
+                        val next = list[j]
+                        if (shouldMergeTextBlock(current, next, widthThreshold, xThreshold, yThreshold)) {
+                            current = mergeTextBlock(current, next)
+                            skip[j] = true
+                            mergedInPass = true
+                        }
+                    }
+                    nextPass.add(current)
+                }
+                list = nextPass
+                list.sortBy { it.y }
+            } while (mergedInPass)
+
+            return list
+        }
+
+        internal fun shouldMergeTextBlock(
+            a: TranslationBlock,
+            b: TranslationBlock,
+            widthThreshold: Int,
+            xThreshold: Int,
+            yThreshold: Int,
+        ): Boolean {
+            val top = if (a.y <= b.y) a else b
+            val bottom = if (a.y <= b.y) b else a
+
+            val verticalGap = bottom.y - (top.y + top.height)
+            val maxLineHeight = maxOf(top.symHeight, bottom.symHeight, 20f)
+            val allowedYGap = maxOf(yThreshold.toFloat(), maxLineHeight * 1.6f)
+            val isYClose = verticalGap >= -maxLineHeight * 0.6f && verticalGap <= allowedYGap
+
+            val centerXa = top.x + top.width / 2f
+            val centerXb = bottom.x + bottom.width / 2f
+            val maxW = maxOf(top.width, bottom.width)
+            val isCenteredAligned = kotlin.math.abs(centerXa - centerXb) <= maxOf(xThreshold.toFloat(), maxW * 0.35f)
+
+            val overlapLeft = maxOf(top.x, bottom.x)
+            val overlapRight = minOf(top.x + top.width, bottom.x + bottom.width)
+            val overlapWidth = (overlapRight - overlapLeft).coerceAtLeast(0f)
+            val minW = minOf(top.width, bottom.width).coerceAtLeast(1f)
+            val hasHorizontalOverlap = (overlapWidth / minW) >= 0.45f
+
+            val isLeftAligned = kotlin.math.abs(top.x - bottom.x) < xThreshold &&
+                ((bottom.width < top.width) || kotlin.math.abs(top.width - bottom.width) < widthThreshold)
+
+            val isFontCompatible = maxOf(top.symHeight, bottom.symHeight) <=
+                minOf(top.symHeight, bottom.symHeight).coerceAtLeast(1f) * 2.2f
+
+            return isYClose && (isCenteredAligned || hasHorizontalOverlap || isLeftAligned) && isFontCompatible
+        }
+
+        internal fun mergeTextBlock(a: TranslationBlock, b: TranslationBlock): TranslationBlock {
+            val top = if (a.y <= b.y) a else b
+            val bottom = if (a.y <= b.y) b else a
+
+            val newX = minOf(top.x, bottom.x)
+            val newY = minOf(top.y, bottom.y)
+            val newWidth = maxOf(top.x + top.width, bottom.x + bottom.width) - newX
+            val newHeight = maxOf(top.y + top.height, bottom.y + bottom.height) - newY
+
+            val cleanTopText = top.text.trim().replace(Regex("\\s*\\n\\s*"), " ")
+            val cleanBottomText = bottom.text.trim().replace(Regex("\\s*\\n\\s*"), " ")
+
+            val mergedText = if (cleanTopText.endsWith("-")) {
+                cleanTopText.removeSuffix("-") + cleanBottomText
+            } else {
+                "$cleanTopText $cleanBottomText"
+            }
+
+            val cleanTopTrans = top.translation.trim().replace(Regex("\\s*\\n\\s*"), " ")
+            val cleanBottomTrans = bottom.translation.trim().replace(Regex("\\s*\\n\\s*"), " ")
+            val mergedTranslation = when {
+                cleanTopTrans.isBlank() -> cleanBottomTrans
+                cleanBottomTrans.isBlank() -> cleanTopTrans
+                cleanTopTrans.endsWith("-") -> cleanTopTrans.removeSuffix("-") + cleanBottomTrans
+                else -> "$cleanTopTrans $cleanBottomTrans"
+            }
+
+            val avgSymHeight = (top.symHeight + bottom.symHeight) / 2f
+            val avgSymWidth = (top.symWidth + bottom.symWidth) / 2f
+
+            return TranslationBlock(
+                text = mergedText,
+                translation = mergedTranslation,
+                width = newWidth,
+                height = newHeight,
+                x = newX,
+                y = newY,
+                symHeight = avgSymHeight,
+                symWidth = avgSymWidth,
+                angle = top.angle,
+            )
         }
     }
 }

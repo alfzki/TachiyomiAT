@@ -15,6 +15,7 @@ import eu.kanade.translation.model.PageTranslation
 import eu.kanade.translation.model.TranslationBlock
 import eu.kanade.translation.model.TranslationContext
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -35,7 +36,7 @@ class AICoreTranslator(
     override val toLang: TextTranslatorLanguage,
     maxOutputTokens: Int,
     temperature: Float,
-    private val useImageContext: Boolean = true,
+    private val useImageContext: Boolean = false,
 ) : TextTranslator {
 
     private val clampedMaxOutputTokens = maxOutputTokens.coerceIn(128, 1024)
@@ -61,16 +62,7 @@ class AICoreTranslator(
         }
         logcat(LogPriority.INFO) { "AICore: canUseSystemPrompt = $canUseSystemPrompt" }
 
-        val systemInstructionText = """
-            You are an expert comic translator (manga, manhwa, manhua).
-            Translate dialog accurately, naturally, and in character into ${toLang.label}.
-            Follow these strict rules:
-            1. Translate each text string in the input JSON array into ${toLang.label}.
-            2. Replace any watermarks, credits, or website URLs (e.g., "colamanga.com") with "RTMTH".
-            3. Return ONLY a valid JSON array of strings: ["translation1", "translation2", ...].
-            4. The output array MUST contain exactly the same number of elements as the input array.
-            5. Do NOT include markdown formatting, markdown code fences, or any other explanations.
-        """.trimIndent()
+        val systemInstructionText = buildSystemInstruction(toLang.label)
 
         val systemInstruction = if (canUseSystemPrompt) {
             SystemInstruction(systemInstructionText)
@@ -89,7 +81,7 @@ class AICoreTranslator(
             val sortedBlocks = sortBlocksInReadingOrder(pageTranslation.blocks, fromLang)
             if (sortedBlocks.isEmpty()) continue
 
-            val currentTexts = sortedBlocks.map { it.text }
+            val currentTexts = sortedBlocks.map { normalizeOcrText(it.text) }
             val prompt = buildContextualPrompt(
                 context = context,
                 targetLanguage = toLang.label,
@@ -124,31 +116,36 @@ class AICoreTranslator(
                         "AICore: executing page translation for $pageKey (${sortedBlocks.size} blocks)..."
                     }
                     val response = executePrompt(
-                        model = generativeModel,
                         prompt = fullPrompt,
                         pageBitmap = pageBitmap,
                         systemInstruction = systemInstruction,
                     )
-                    val rawOutput = response.candidates.firstOrNull()?.text
+                    val rawOutput = response?.candidates?.firstOrNull()?.text
                     logcat(LogPriority.INFO) { "AICore: page translation raw output: $rawOutput" }
-                    val parsed = parseJsonArrayResponse(rawOutput)
-                    if (parsed != null && parsed.size == sortedBlocks.size) {
+                    val parsed = parseJsonArrayResponse(rawOutput, expectedCount = sortedBlocks.size)
+                    if (parsed != null && parsed.isNotEmpty()) {
                         translations = parsed
                     }
                 } catch (e: Throwable) {
                     logcat(LogPriority.WARN, e) { "AICore page translation failed, falling back to per-block" }
                 }
 
-                if (translations != null) {
+                if (translations != null && translations.size == sortedBlocks.size) {
                     sortedBlocks.forEachIndexed { index, block ->
                         val trans = translations[index]
                         block.translation = if (trans.isNotBlank()) trans else block.text
                     }
                 } else {
-                    for (block in sortedBlocks) {
+                    for ((index, block) in sortedBlocks.withIndex()) {
+                        val existingTrans = translations?.getOrNull(index)?.takeIf { it.isNotBlank() }
+                        if (existingTrans != null) {
+                            block.translation = existingTrans
+                            continue
+                        }
+                        val normalizedText = normalizeOcrText(block.text)
                         val singlePrompt = "Translate the following comic dialog into ${toLang.label}. " +
                             "Replace watermarks or site links with \"RTMTH\". " +
-                            "Output ONLY the translation without quotes:\n${block.text}"
+                            "Output ONLY the translation without quotes:\n$normalizedText"
                         val blockPrompt = if (systemInstruction == null) {
                             "$systemInstructionText\n\n$singlePrompt"
                         } else {
@@ -156,12 +153,11 @@ class AICoreTranslator(
                         }
                         try {
                             val blockResponse = executePrompt(
-                                model = generativeModel,
                                 prompt = blockPrompt,
                                 pageBitmap = pageBitmap,
                                 systemInstruction = systemInstruction,
                             )
-                            val trans = blockResponse.candidates.firstOrNull()?.text?.trim()
+                            val trans = blockResponse?.candidates?.firstOrNull()?.text?.trim()
                             block.translation = if (!trans.isNullOrBlank()) trans else block.text
                         } catch (e: Exception) {
                             logcat(LogPriority.WARN, e) { "AICore fallback block translation failed" }
@@ -182,6 +178,8 @@ class AICoreTranslator(
                 }
             } finally {
                 pageBitmap?.recycle()
+                runCatching { generativeModel.clearImplicitCaches() }
+                delay(100L)
             }
         }
     }
@@ -257,12 +255,41 @@ class AICoreTranslator(
         return generativeModel
     }
 
+    private suspend fun generateWithRetry(
+        request: com.google.mlkit.genai.prompt.GenerateContentRequest,
+    ): com.google.mlkit.genai.prompt.GenerateContentResponse? {
+        var lastError: Throwable? = null
+        for (attempt in 0..2) {
+            if (attempt > 0) {
+                delay(600L * attempt)
+                val currentModel = model
+                if (currentModel != null) {
+                    runCatching { currentModel.clearImplicitCaches() }
+                }
+                if (attempt == 2) {
+                    runCatching { model?.close() }
+                    model = null
+                }
+            }
+            try {
+                val m = getOrInitModel()
+                return m.generateContent(request)
+            } catch (t: Throwable) {
+                lastError = t
+                logcat(LogPriority.WARN, t) { "AICore generateWithRetry attempt $attempt failed" }
+            }
+        }
+        if (lastError != null) {
+            logcat(LogPriority.ERROR, lastError) { "AICore generateWithRetry all attempts failed" }
+        }
+        return null
+    }
+
     private suspend fun executePrompt(
-        model: GenerativeModel,
         prompt: String,
         pageBitmap: Bitmap?,
         systemInstruction: SystemInstruction?,
-    ): com.google.mlkit.genai.prompt.GenerateContentResponse {
+    ): com.google.mlkit.genai.prompt.GenerateContentResponse? {
         logcat(LogPriority.INFO) {
             "AICore: executePrompt - prompt length=${prompt.length}, bitmap=${pageBitmap != null}"
         }
@@ -270,25 +297,24 @@ class AICoreTranslator(
         if (pageBitmap != null && multimediaSupported) {
             logcat(LogPriority.INFO) { "AICore: attempting multimodal call..." }
             val imagePart = ImagePart(pageBitmap)
-            try {
-                val request = if (systemInstruction != null) {
-                    generateContentRequest(systemInstruction, imagePart, textPart) {
-                        temperature = clampedTemperature
-                        maxOutputTokens = clampedMaxOutputTokens
-                    }
-                } else {
-                    generateContentRequest(imagePart, textPart) {
-                        temperature = clampedTemperature
-                        maxOutputTokens = clampedMaxOutputTokens
-                    }
+            val request = if (systemInstruction != null) {
+                generateContentRequest(systemInstruction, imagePart, textPart) {
+                    temperature = clampedTemperature
+                    maxOutputTokens = clampedMaxOutputTokens
                 }
-                val resp = model.generateContent(request)
+            } else {
+                generateContentRequest(imagePart, textPart) {
+                    temperature = clampedTemperature
+                    maxOutputTokens = clampedMaxOutputTokens
+                }
+            }
+            val resp = generateWithRetry(request)
+            if (resp != null) {
                 logcat(LogPriority.INFO) { "AICore: multimodal call succeeded!" }
                 return resp
-            } catch (e: Throwable) {
-                logcat(LogPriority.WARN, e) { "AICore multimodal call failed, falling back to text-only" }
-                multimediaSupported = false
             }
+            logcat(LogPriority.WARN) { "AICore multimodal call failed with retry, falling back to text-only" }
+            multimediaSupported = false
         }
 
         logcat(LogPriority.INFO) { "AICore: attempting text-only call..." }
@@ -303,8 +329,10 @@ class AICoreTranslator(
                 maxOutputTokens = clampedMaxOutputTokens
             }
         }
-        val resp = model.generateContent(request)
-        logcat(LogPriority.INFO) { "AICore: text-only call succeeded!" }
+        val resp = generateWithRetry(request)
+        if (resp != null) {
+            logcat(LogPriority.INFO) { "AICore: text-only call succeeded!" }
+        }
         return resp
     }
 
@@ -317,6 +345,78 @@ class AICoreTranslator(
         private val json = Json {
             ignoreUnknownKeys = true
             isLenient = true
+        }
+
+        fun normalizeOcrText(text: String): String {
+            return text
+                .replace(Regex("-\\s*\\n\\s*"), "")
+                .replace('\r', ' ')
+                .replace('\n', ' ')
+                .replace(Regex("\\s+"), " ")
+                .trim()
+        }
+
+        fun buildSystemInstruction(targetLangName: String): String {
+            return """
+                You are an expert comic translator specialized in manga, manhwa, and manhua.
+                Translate dialog accurately, naturally, and in character into $targetLangName.
+
+                Strict rules:
+                1. Automatically infer and fix comic OCR character misreads (e.g. "SD WH" -> "SO WHY", "ANYNATSP" -> "ANYWAYS?", "VY" -> "MY", "HON" -> "HOW", "PEAL" -> "DEAL", "SLDNLH" -> "SLOWLY", confusing '0'/'O', '1'/'I'/'l').
+                2. Translate into natural, idiomatic, conversational $targetLangName suitable for comics/manhwa (avoid stiff word-for-word translation, e.g. avoid translating "It's why" as "It adalah alasannya").
+                3. Keep established comic/manhwa terminology natural and consistent (e.g., Hunter, Gate, Dungeon, Raid, Guild, Rank, Mana, Boss, Awakening, Status Window).
+                4. Replace any watermarks, translator credits, or website URLs (e.g. scanlation credits or domain names like "*.com") with "RTMTH".
+                5. Return ONLY a valid JSON array of strings matching the exact number and order of input blocks: ["translation 1", "translation 2", ...].
+                6. Do NOT include markdown formatting, code fences (```), or explanations. Never include raw unescaped newlines inside the JSON strings.
+            """.trimIndent()
+        }
+
+        fun sanitizeJsonStringLiterals(raw: String): String {
+            val sb = StringBuilder(raw.length)
+            var inString = false
+            var escaped = false
+            for (i in 0 until raw.length) {
+                val c = raw[i]
+                if (escaped) {
+                    sb.append(c)
+                    escaped = false
+                    continue
+                }
+                if (c == '\\') {
+                    sb.append(c)
+                    escaped = true
+                    continue
+                }
+                if (c == '"') {
+                    inString = !inString
+                    sb.append(c)
+                    continue
+                }
+                if (inString) {
+                    when (c) {
+                        '\n', '\r', '\t' -> sb.append(' ')
+                        else -> sb.append(c)
+                    }
+                } else {
+                    sb.append(c)
+                }
+            }
+            return sb.toString()
+        }
+
+        fun parseNumberedLinesResponse(rawText: String?, expectedCount: Int): List<String>? {
+            if (rawText.isNullOrBlank()) return null
+            val lines = rawText.lines().map { it.trim() }.filter { it.isNotBlank() }
+            val lineRegex = Regex("^(?:\\[?(\\d+)\\]?[:.]?|-|\\*)\\s*(.*)$")
+            val items = mutableListOf<String>()
+            for (line in lines) {
+                val match = lineRegex.find(line)
+                if (match != null) {
+                    val content = match.groupValues[2].trim().removeSurrounding("\"")
+                    items.add(content)
+                }
+            }
+            return if (items.size == expectedCount) items else null
         }
 
         fun truncateSynopsis(synopsis: String, maxLength: Int = 350): String {
@@ -409,7 +509,7 @@ class AICoreTranslator(
             return builder.toString()
         }
 
-        fun parseJsonArrayResponse(rawText: String?): List<String>? {
+        fun parseJsonArrayResponse(rawText: String?, expectedCount: Int? = null): List<String>? {
             if (rawText.isNullOrBlank()) return null
             var cleaned = rawText.trim()
 
@@ -422,31 +522,42 @@ class AICoreTranslator(
 
             val startIndex = cleaned.indexOf('[')
             val endIndex = cleaned.lastIndexOf(']')
-            if (startIndex == -1 || endIndex == -1 || endIndex < startIndex) {
-                return null
-            }
-            val jsonSubstr = cleaned.substring(startIndex, endIndex + 1)
-
-            try {
-                val element = json.parseToJsonElement(jsonSubstr)
-                if (element is JsonArray) {
-                    return element.map {
-                        if (it is JsonPrimitive) it.content else it.toString()
+            if (startIndex != -1 && endIndex != -1 && endIndex > startIndex) {
+                val jsonSubstr = sanitizeJsonStringLiterals(cleaned.substring(startIndex, endIndex + 1))
+                val jsonResult = try {
+                    val element = json.parseToJsonElement(jsonSubstr)
+                    if (element is JsonArray) {
+                        element.map {
+                            if (it is JsonPrimitive) it.content else it.toString()
+                        }
+                    } else {
+                        null
+                    }
+                } catch (_: Throwable) {
+                    try {
+                        val jsonArray = JSONArray(jsonSubstr)
+                        val result = mutableListOf<String>()
+                        for (i in 0 until jsonArray.length()) {
+                            result.add(jsonArray.optString(i, ""))
+                        }
+                        result
+                    } catch (_: Throwable) {
+                        null
                     }
                 }
-            } catch (_: Exception) {
+                if (jsonResult != null) {
+                    if (expectedCount == null || jsonResult.size == expectedCount || jsonResult.isNotEmpty()) {
+                        return jsonResult
+                    }
+                }
             }
 
-            return try {
-                val jsonArray = JSONArray(jsonSubstr)
-                val result = mutableListOf<String>()
-                for (i in 0 until jsonArray.length()) {
-                    result.add(jsonArray.optString(i, ""))
-                }
-                result
-            } catch (_: Throwable) {
-                null
+            if (expectedCount != null) {
+                val numbered = parseNumberedLinesResponse(cleaned, expectedCount)
+                if (numbered != null) return numbered
             }
+
+            return null
         }
     }
 }

@@ -39,7 +39,7 @@ class TranslationPreferences(
         preferenceStore.getString("translation_engine_output_tokens", "8192")
 
     val aicoreUsePageImageContext: Preference<Boolean> =
-        preferenceStore.getBoolean("aicore_use_page_image_context", true)
+        preferenceStore.getBoolean("aicore_use_page_image_context", false)
 
     fun autoTranslateAfterDownload() = autoTranslateAfterDownload
     fun translateFromLanguage() = translateFromLanguage
