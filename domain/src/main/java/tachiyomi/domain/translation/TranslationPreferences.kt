@@ -38,6 +38,9 @@ class TranslationPreferences(
     val translationEngineMaxOutputTokens: Preference<String> =
         preferenceStore.getString("translation_engine_output_tokens", "8192")
 
+    val aicoreUsePageImageContext: Preference<Boolean> =
+        preferenceStore.getBoolean("aicore_use_page_image_context", true)
+
     fun autoTranslateAfterDownload() = autoTranslateAfterDownload
     fun translateFromLanguage() = translateFromLanguage
     fun translateToLanguage() = translateToLanguage
@@ -47,4 +50,5 @@ class TranslationPreferences(
     fun translationEngineApiKey() = translationEngineApiKey
     fun translationEngineTemperature() = translationEngineTemperature
     fun translationEngineMaxOutputTokens() = translationEngineMaxOutputTokens
+    fun aicoreUsePageImageContext() = aicoreUsePageImageContext
 }

@@ -1,6 +1,7 @@
 package eu.kanade.translation.translator
 
 import eu.kanade.translation.model.PageTranslation
+import eu.kanade.translation.model.TranslationContext
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.domain.translation.TranslationPreferences
@@ -10,6 +11,10 @@ interface TextTranslator : Closeable {
     val fromLang: TextRecognizerLanguage
     val toLang: TextTranslatorLanguage
     suspend fun translate(pages: MutableMap<String, PageTranslation>)
+    suspend fun translate(
+        pages: MutableMap<String, PageTranslation>,
+        context: TranslationContext,
+    ) = translate(pages)
 }
 
 enum class TextTranslators(val label: String) {
@@ -17,6 +22,7 @@ enum class TextTranslators(val label: String) {
     GOOGLE("Google Translate"),
     GEMINI("Gemini AI [API KEY]"),
     OPENROUTER("OpenRouter [API KEY]"),
+    AICORE("AICore (On Device NPU)"),
     ;
 
     fun build(
@@ -33,6 +39,13 @@ enum class TextTranslators(val label: String) {
             GOOGLE -> GoogleTranslator(fromLang, toLang)
             GEMINI -> GeminiTranslator(fromLang, toLang, apiKey, modelName, maxOutputTokens, temperature)
             OPENROUTER -> OpenRouterTranslator(fromLang, toLang, apiKey, modelName, maxOutputTokens, temperature)
+            AICORE -> AICoreTranslator(
+                fromLang,
+                toLang,
+                maxOutputTokens,
+                temperature,
+                pref.aicoreUsePageImageContext().get(),
+            )
         }
     }
 

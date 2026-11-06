@@ -83,6 +83,11 @@ object SettingsTranslationScreen : SearchableSettings {
                     subtitle = stringResource(ATMR.strings.pref_sub_engine_api_key),
                     title = stringResource(ATMR.strings.pref_engine_api_key),
                 ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = translationPreferences.aicoreUsePageImageContext,
+                    title = stringResource(ATMR.strings.pref_aicore_image_context),
+                    subtitle = stringResource(ATMR.strings.pref_aicore_image_context_summary),
+                ),
             ),
         )
     }

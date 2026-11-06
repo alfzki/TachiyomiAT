@@ -1,6 +1,8 @@
 package eu.kanade.translation
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.hippo.unifile.UniFile
@@ -12,8 +14,10 @@ import eu.kanade.translation.data.TranslationProvider
 import eu.kanade.translation.model.PageTranslation
 import eu.kanade.translation.model.Translation
 import eu.kanade.translation.model.TranslationBlock
+import eu.kanade.translation.model.TranslationContext
 import eu.kanade.translation.recognizer.TextRecognizer
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
+import eu.kanade.translation.translator.AICoreUnavailableException
 import eu.kanade.translation.translator.TextTranslator
 import eu.kanade.translation.translator.TextTranslatorLanguage
 import eu.kanade.translation.translator.TextTranslators
@@ -262,6 +266,19 @@ class ChapterTranslator(
                                 val pageTranslation = convertToPageTranslation(blocks, image.width, image.height)
                                 if (pageTranslation.blocks.isNotEmpty()) pages[entryName] = pageTranslation
                             }
+
+                            val translationContext = TranslationContext(
+                                mangaTitle = translation.manga.title,
+                                chapterTitle = translation.chapter.name,
+                                genres = translation.manga.genre.orEmpty(),
+                                synopsis = translation.manga.description.orEmpty(),
+                                pageBitmapLoader = { pageKey ->
+                                    decodeSampledBitmap(maxDimension = 768) {
+                                        reader.getInputStream(pageKey)
+                                    }
+                                },
+                            )
+                            textTranslator.translate(pages, translationContext)
                         }
                     } else {
                         val files = chapterPath.listFiles().orEmpty()
@@ -280,10 +297,22 @@ class ChapterTranslator(
                             val pageTranslation = convertToPageTranslation(blocks, image.width, image.height)
                             if (pageTranslation.blocks.isNotEmpty()) pages[file.name!!] = pageTranslation
                         }
-                    }
 
-                    // Translate the text in blocks , this mutates the original blocks
-                    textTranslator.translate(pages)
+                        val translationContext = TranslationContext(
+                            mangaTitle = translation.manga.title,
+                            chapterTitle = translation.chapter.name,
+                            genres = translation.manga.genre.orEmpty(),
+                            synopsis = translation.manga.description.orEmpty(),
+                            pageBitmapLoader = { pageKey ->
+                                files.find { it.name == pageKey }?.let { file ->
+                                    decodeSampledBitmap(maxDimension = 768) {
+                                        file.openInputStream()
+                                    }
+                                }
+                            },
+                        )
+                        textTranslator.translate(pages, translationContext)
+                    }
                 }
             } finally {
                 tmpFile.delete()
@@ -292,9 +321,54 @@ class ChapterTranslator(
             val targetFile = translationMangaDir.findFile(saveFile) ?: translationMangaDir.createFile(saveFile)!!
             Json.encodeToStream(pages, targetFile.openOutputStream())
             translation.status = Translation.State.TRANSLATED
+        } catch (e: AICoreUnavailableException) {
+            withContext(Dispatchers.Main) {
+                context.toast(ATMR.strings.error_aicore_unavailable)
+            }
+            translation.status = Translation.State.ERROR
+            logcat(LogPriority.ERROR, e)
         } catch (error: Throwable) {
             translation.status = Translation.State.ERROR
             logcat(LogPriority.ERROR, error)
+        }
+    }
+
+    private fun decodeSampledBitmap(
+        maxDimension: Int = 768,
+        streamProvider: () -> InputStream?,
+    ): Bitmap? {
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        val openStream1 = streamProvider() ?: return null
+        try {
+            openStream1.use { BitmapFactory.decodeStream(it, null, options) }
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Failed to decode image bounds" }
+            return null
+        }
+
+        val origWidth = options.outWidth
+        val origHeight = options.outHeight
+        if (origWidth <= 0 || origHeight <= 0) return null
+
+        var inSampleSize = 1
+        val maxSide = maxOf(origWidth, origHeight)
+        while (maxSide / inSampleSize > maxDimension) {
+            inSampleSize *= 2
+        }
+
+        val decodeOptions = BitmapFactory.Options().apply {
+            this.inSampleSize = inSampleSize
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+
+        val openStream2 = streamProvider() ?: return null
+        return try {
+            openStream2.use { BitmapFactory.decodeStream(it, null, decodeOptions) }
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Failed to decode sampled image bitmap" }
+            null
         }
     }
 
