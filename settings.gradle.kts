@@ -28,7 +28,7 @@ dependencyResolutionManagement {
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
-rootProject.name = "Mihon"
+rootProject.name = "TachiyomiAT"
 include(":app")
 include(":baseline-profile")
 include(":core-metadata")
@@ -38,6 +38,7 @@ include(":core:metro")
 include(":data")
 include(":domain")
 include(":i18n")
+include(":i18n-at")
 include(":icons:custom-material-symbols")
 include(":icons:material-symbols")
 include(":icons:simple-icons")

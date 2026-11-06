@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
+import tachiyomi.i18n.at.ATMR
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -40,6 +41,7 @@ import mihon.icons.materialsymbols.rounded.Download
 import mihon.icons.materialsymbols.rounded.Explore
 import mihon.icons.materialsymbols.rounded.Info
 import mihon.icons.materialsymbols.rounded.Palette
+import mihon.icons.materialsymbols.rounded.Public
 import mihon.icons.materialsymbols.rounded.Search
 import mihon.icons.materialsymbols.rounded.Security
 import mihon.icons.materialsymbols.rounded.Storage
@@ -194,6 +196,12 @@ object SettingsMainScreen : Screen() {
             subtitleRes = MR.strings.pref_downloads_summary,
             icon = MaterialSymbols.Rounded.Download,
             screen = SettingsDownloadScreen,
+        ),
+        Item(
+            titleRes = ATMR.strings.pref_category_translations,
+            subtitleRes = ATMR.strings.pref_translation_summary,
+            icon = MaterialSymbols.Rounded.Public,
+            screen = SettingsTranslationScreen,
         ),
         Item(
             titleRes = MR.strings.pref_category_tracking,

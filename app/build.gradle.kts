@@ -35,7 +35,7 @@ android {
     namespace = "eu.kanade.tachiyomi"
 
     defaultConfig {
-        applicationId = "app.mihon"
+        applicationId = "app.kanade.tachiyomi.at"
 
         versionCode = 39
         versionName = "0.21.3"
@@ -205,6 +205,7 @@ dependencies {
     baselineProfile(projects.baselineProfile)
 
     implementation(projects.i18n)
+    implementation(projects.i18nAt)
     implementation(projects.icons.customMaterialSymbols)
     implementation(projects.icons.materialSymbols)
     implementation(projects.icons.simpleIcons)
@@ -331,6 +332,14 @@ dependencies {
     implementation(libs.leakCanary.plumber)
 
     testImplementation(libs.kotlinx.coroutines.test)
+
+    // TachiyomiAT
+    implementation(libs.mlkit.text.recognition)
+    implementation(libs.mlkit.text.recognition.japanese)
+    implementation(libs.mlkit.text.recognition.korean)
+    implementation(libs.mlkit.text.recognition.chinese)
+    implementation(libs.mlkit.text.translate)
+    implementation(libs.google.generativeai)
 }
 
 apollo {

@@ -167,7 +167,7 @@ class DownloadManager(
      * @param chapter the downloaded chapter.
      * @return the list of pages from the chapter.
      */
-    suspend fun buildPageList(source: Source, manga: Manga, chapter: Chapter): List<Page> {
+    suspend fun buildPageList(source: Source, manga: Manga, chapter: Chapter): List<Pair<String, Page>> {
         val chapterDir = provider.findChapterDir(chapter.name, chapter.scanlator, chapter.url, manga.title, source)
         val files = withContext(Dispatchers.IO) {
             chapterDir?.listFiles().orEmpty()
@@ -180,7 +180,7 @@ class DownloadManager(
 
         return files.sortedBy { it.name }
             .mapIndexed { i, file ->
-                Page(i, uri = file.uri).apply { status = Page.State.Ready }
+                Pair(file.name!!, Page(i, uri = file.uri).apply { status = Page.State.Ready })
             }
     }
 

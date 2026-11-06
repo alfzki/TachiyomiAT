@@ -48,6 +48,7 @@ import androidx.compose.ui.util.fastMap
 import eu.kanade.presentation.components.relativeDateText
 import eu.kanade.presentation.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.manga.components.ChapterHeader
+import eu.kanade.presentation.manga.components.ChapterTranslationAction
 import eu.kanade.presentation.manga.components.ExpandableMangaDescription
 import eu.kanade.presentation.manga.components.MangaActionRow
 import eu.kanade.presentation.manga.components.MangaBottomActionMenu
@@ -88,6 +89,7 @@ fun MangaScreen(
     navigateUp: () -> Unit,
     onChapterClicked: (Chapter) -> Unit,
     onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
+    onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     downloadProgressProvider: (chapterId: Long) -> Int,
     onAddToLibraryClicked: () -> Unit,
     onWebViewClicked: (() -> Unit)?,
@@ -144,6 +146,7 @@ fun MangaScreen(
             navigateUp = navigateUp,
             onChapterClicked = onChapterClicked,
             onDownloadChapter = onDownloadChapter,
+            onTranslationChapter = onTranslationChapter,
             downloadProgressProvider = downloadProgressProvider,
             onAddToLibraryClicked = onAddToLibraryClicked,
             onWebViewClicked = onWebViewClicked,
@@ -181,6 +184,7 @@ fun MangaScreen(
             navigateUp = navigateUp,
             onChapterClicked = onChapterClicked,
             onDownloadChapter = onDownloadChapter,
+            onTranslationChapter = onTranslationChapter,
             downloadProgressProvider = downloadProgressProvider,
             onAddToLibraryClicked = onAddToLibraryClicked,
             onWebViewClicked = onWebViewClicked,
@@ -221,6 +225,7 @@ private fun MangaScreenSmallImpl(
     navigateUp: () -> Unit,
     onChapterClicked: (Chapter) -> Unit,
     onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
+    onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     downloadProgressProvider: (chapterId: Long) -> Int,
     onAddToLibraryClicked: () -> Unit,
     onWebViewClicked: (() -> Unit)?,
@@ -433,6 +438,7 @@ private fun MangaScreenSmallImpl(
                         chapterSwipeEndAction = chapterSwipeEndAction,
                         onChapterClicked = onChapterClicked,
                         onDownloadChapter = onDownloadChapter,
+                        onTranslationChapter = onTranslationChapter,
                         downloadProgressProvider = downloadProgressProvider,
                         onChapterSelected = onChapterSelected,
                         onChapterSwipe = onChapterSwipe,
@@ -453,6 +459,7 @@ fun MangaScreenLargeImpl(
     navigateUp: () -> Unit,
     onChapterClicked: (Chapter) -> Unit,
     onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
+    onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     downloadProgressProvider: (chapterId: Long) -> Int,
     onAddToLibraryClicked: () -> Unit,
     onWebViewClicked: (() -> Unit)?,
@@ -658,6 +665,7 @@ fun MangaScreenLargeImpl(
                                 chapterSwipeEndAction = chapterSwipeEndAction,
                                 onChapterClicked = onChapterClicked,
                                 onDownloadChapter = onDownloadChapter,
+                                onTranslationChapter = onTranslationChapter,
                                 downloadProgressProvider = downloadProgressProvider,
                                 onChapterSelected = onChapterSelected,
                                 onChapterSwipe = onChapterSwipe,
@@ -720,6 +728,7 @@ private fun LazyListScope.sharedChapterItems(
     chapterSwipeEndAction: LibraryPreferences.ChapterSwipeAction,
     onChapterClicked: (Chapter) -> Unit,
     onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
+    onTranslationChapter: ((ChapterList.Item, ChapterTranslationAction) -> Unit)?,
     downloadProgressProvider: (chapterId: Long) -> Int,
     onChapterSelected: (ChapterList.Item, Boolean, Boolean) -> Unit,
     onChapterSwipe: (ChapterList.Item, LibraryPreferences.ChapterSwipeAction) -> Unit,
@@ -765,6 +774,7 @@ private fun LazyListScope.sharedChapterItems(
                     selected = item.selected,
                     downloadIndicatorEnabled = !isAnyChapterSelected && !manga.isLocal(),
                     downloadStateProvider = { item.downloadState },
+                    translationStateProvider = { item.translationState },
                     downloadProgressProvider = { downloadProgressProvider(item.id) },
                     chapterSwipeStartAction = chapterSwipeStartAction,
                     chapterSwipeEndAction = chapterSwipeEndAction,
@@ -782,6 +792,11 @@ private fun LazyListScope.sharedChapterItems(
                     },
                     onDownloadClick = if (onDownloadChapter != null) {
                         { onDownloadChapter(listOf(item), it) }
+                    } else {
+                        null
+                    },
+                    onTranslationClick = if (onTranslationChapter != null) {
+                        { onTranslationChapter(item, it) }
                     } else {
                         null
                     },

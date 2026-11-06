@@ -20,6 +20,9 @@ class ReaderPreferences(
 
     // region General
 
+    val showTranslations: Preference<Boolean> = preferenceStore.getBoolean("show_translations", true)
+    fun showTranslations() = showTranslations
+
     val pageTransitions: Preference<Boolean> = preferenceStore.getBoolean("pref_enable_transitions_key", true)
 
     val loadAheadOnlyOverWifi: Preference<Boolean> = preferenceStore.getBoolean(

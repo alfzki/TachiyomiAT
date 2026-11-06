@@ -17,14 +17,19 @@ import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.dpToPx
+import eu.kanade.translation.data.TranslationFont
+import eu.kanade.translation.presentation.WebtoonTranslationsView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
+import mihon.app.di.appGraph
 import okio.Buffer
 import okio.BufferedSource
 import tachiyomi.core.common.i18n.stringResource
@@ -43,6 +48,13 @@ class WebtoonPageHolder(
     private val frame: ReaderPageImageView,
     viewer: WebtoonViewer,
 ) : WebtoonBaseHolder(frame, viewer) {
+
+    private val translationPreferences = context.appGraph.translationPreferences
+    private val font = TranslationFont.fromPref(translationPreferences.translationFont)
+    private val readerPreferences = context.appGraph.readerPreferences
+
+    private var showTranslations = true
+    private var translationsView: WebtoonTranslationsView? = null
 
     /**
      * Loading progress bar to indicate the current progress.
@@ -84,6 +96,16 @@ class WebtoonPageHolder(
         frame.onImageLoaded = { onImageDecoded() }
         frame.onImageLoadError = { error -> setError(error) }
         frame.onScaleChanged = { viewer.activity.hideMenu() }
+
+        showTranslations = readerPreferences.showTranslations.get()
+        readerPreferences.showTranslations.changes().onEach {
+            showTranslations = it
+            if (it) {
+                translationsView?.show()
+            } else {
+                translationsView?.hide()
+            }
+        }.launchIn(scope)
     }
 
     /**
@@ -115,6 +137,8 @@ class WebtoonPageHolder(
         loadJob = null
 
         removeErrorLayout()
+        frame.removeView(translationsView)
+        translationsView = null
         frame.recycle()
         progressIndicator.setProgress(0)
         progressContainer.isVisible = true
@@ -144,7 +168,10 @@ class WebtoonPageHolder(
                             progressIndicator.setProgress(value)
                         }
                     }
-                    Page.State.Ready -> setImage()
+                    Page.State.Ready -> {
+                        setImage()
+                        addTranslationsView()
+                    }
                     is Page.State.Error -> setError(state.error)
                 }
             }
@@ -246,6 +273,7 @@ class WebtoonPageHolder(
     private fun setError(error: Throwable?) {
         progressContainer.isVisible = false
         initErrorLayout(error)
+        translationsView?.hide()
     }
 
     /**
@@ -254,6 +282,15 @@ class WebtoonPageHolder(
     private fun onImageDecoded() {
         progressContainer.isVisible = false
         removeErrorLayout()
+        translationsView?.show()
+    }
+
+    private fun addTranslationsView() {
+        if (page?.translation == null) return
+        frame.removeView(translationsView)
+        translationsView = WebtoonTranslationsView(context, translation = page!!.translation!!, font = font)
+        if (!showTranslations) translationsView?.hide()
+        frame.addView(translationsView, MATCH_PARENT, MATCH_PARENT)
     }
 
     /**

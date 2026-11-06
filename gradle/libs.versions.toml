@@ -77,8 +77,18 @@ unifile = "08f224c8f9"
 valkyrie = "0.5.2"
 voyager = "2.2.21-1.10.3"
 xmlutil = "1.0.2"
+mlkit-text-recognition-version = "16.0.1"
+mlkit-text-translate-version = "17.0.3"
+google-generativeai-version = "0.9.0"
 
 [libraries]
+mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkit-text-recognition-version" }
+mlkit-text-recognition-chinese = { module = "com.google.mlkit:text-recognition-chinese", version.ref = "mlkit-text-recognition-version" }
+mlkit-text-recognition-japanese = { module = "com.google.mlkit:text-recognition-japanese", version.ref = "mlkit-text-recognition-version" }
+mlkit-text-recognition-korean = { module = "com.google.mlkit:text-recognition-korean", version.ref = "mlkit-text-recognition-version" }
+mlkit-text-translate = { module = "com.google.mlkit:translate", version.ref = "mlkit-text-translate-version" }
+google-generativeai = { module = "com.google.ai.client.generativeai:generativeai", version.ref = "google-generativeai-version" }
+
 aboutLibraries-compose = { module = "com.mikepenz:aboutlibraries-compose-m3", version.ref = "aboutLibraries" }
 android-desugar = { module = "com.android.tools:desugar_jdk_libs", version.ref = "android-desugar" }
 android-gradle = { module = "com.android.tools.build:gradle", version.ref = "android-gradle" }

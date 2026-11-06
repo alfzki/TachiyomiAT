@@ -2,8 +2,11 @@ package eu.kanade.tachiyomi.ui.reader.viewer.pager
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.PointF
 import android.view.LayoutInflater
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.core.view.isVisible
+import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
@@ -13,14 +16,19 @@ import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.widget.ViewPagerAdapter
+import eu.kanade.translation.data.TranslationFont
+import eu.kanade.translation.presentation.PagerTranslationsView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
+import mihon.app.di.appGraph
 import okio.Buffer
 import okio.BufferedSource
 import tachiyomi.core.common.i18n.stringResource
@@ -37,6 +45,13 @@ class PagerPageHolder(
     val viewer: PagerViewer,
     val page: ReaderPage,
 ) : ReaderPageImageView(readerThemedContext), ViewPagerAdapter.PositionableView {
+
+    private val translationPreferences = readerThemedContext.appGraph.translationPreferences
+    private val font = TranslationFont.fromPref(translationPreferences.translationFont)
+    private val readerPreferences = readerThemedContext.appGraph.readerPreferences
+
+    private var showTranslations = true
+    private var translationsView: PagerTranslationsView? = null
 
     /**
      * Item that identifies this view. Needed by the adapter to not recreate views.
@@ -63,6 +78,15 @@ class PagerPageHolder(
 
     init {
         loadJob = scope.launch { loadPageAndProcessStatus() }
+        showTranslations = readerPreferences.showTranslations.get()
+        readerPreferences.showTranslations.changes().onEach {
+            showTranslations = it
+            if (it) {
+                translationsView?.show()
+            } else {
+                translationsView?.hide()
+            }
+        }.launchIn(scope)
     }
 
     /**
@@ -249,11 +273,13 @@ class PagerPageHolder(
     private fun setError(error: Throwable?) {
         progressIndicator?.hide()
         showErrorLayout(error)
+        translationsView?.hide()
     }
 
     override fun onImageLoaded() {
         super.onImageLoaded()
         progressIndicator?.hide()
+        addTranslationsView()
     }
 
     /**
@@ -264,12 +290,42 @@ class PagerPageHolder(
         setError(error)
     }
 
+    override fun onCenterChanged(newCenter: PointF?) {
+        super.onCenterChanged(newCenter)
+        (pageView as? SubsamplingScaleImageView)?.let { vi ->
+            updateTranslationCoords(vi)
+        }
+    }
+
     /**
      * Called when an image is zoomed in/out.
      */
     override fun onScaleChanged(newScale: Float) {
         super.onScaleChanged(newScale)
         viewer.activity.hideMenu()
+        (pageView as? SubsamplingScaleImageView)?.let { vi ->
+            updateTranslationCoords(vi)
+        }
+    }
+
+    private fun addTranslationsView() {
+        if (page.translation == null) return
+        removeView(translationsView)
+        translationsView = PagerTranslationsView(context, translation = page.translation!!, font = font)
+        if (!showTranslations) translationsView?.hide()
+        addView(translationsView, MATCH_PARENT, MATCH_PARENT)
+        (pageView as? SubsamplingScaleImageView)?.let { vi ->
+            updateTranslationCoords(vi)
+        }
+    }
+
+    private fun updateTranslationCoords(vi: SubsamplingScaleImageView) {
+        if (page.translation == null) return
+        val coords = vi.sourceToViewCoord(0f, 0f)
+        if (coords != null) {
+            translationsView?.viewTLState?.value = coords
+        }
+        translationsView?.scaleState?.value = vi.scale
     }
 
     private fun showErrorLayout(error: Throwable?): ReaderErrorBinding {

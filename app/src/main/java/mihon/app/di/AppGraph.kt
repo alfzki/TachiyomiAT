@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadCache
 import eu.kanade.tachiyomi.data.download.DownloadManager
+import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.download.DownloadWorker
 import eu.kanade.tachiyomi.data.library.LibraryUpdateWorker
 import eu.kanade.tachiyomi.data.library.MetadataUpdateWorker
@@ -33,6 +34,9 @@ import eu.kanade.tachiyomi.extension.util.ExtensionInstallActivity
 import eu.kanade.tachiyomi.network.JavaScriptEngine
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
+import eu.kanade.translation.TranslationManager
+import eu.kanade.translation.data.TranslationProvider
+import tachiyomi.domain.translation.TranslationPreferences
 import eu.kanade.tachiyomi.ui.base.delegate.SecureActivityDelegateImpl
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
@@ -97,6 +101,10 @@ interface AppGraph : ViewModelGraph {
     val crashLogUtil: CrashLogUtil
 
     val downloadManager: DownloadManager
+    val downloadProvider: DownloadProvider
+    val translationProvider: TranslationProvider
+    val translationManager: TranslationManager
+    val translationPreferences: TranslationPreferences
 
     val updateChecker: AppUpdateChecker
 
