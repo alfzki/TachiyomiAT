@@ -192,7 +192,9 @@ class ChapterTranslator(
         val toLang = TextTranslatorLanguage.fromPref(translationPreferences.translateToLanguage())
         val engine = TextTranslators.fromPref(translationPreferences.translationEngine())
         if (engine == TextTranslators.MLKIT && !TextTranslatorLanguage.mlkitSupportedLanguages().contains(toLang)) {
-            context.toast(ATMR.strings.error_mlkit_language_unsupported)
+            withContext(Dispatchers.Main) {
+                context.toast(ATMR.strings.error_mlkit_language_unsupported)
+            }
             return
         }
         val translation = Translation(source, manga, chapter, fromLang, toLang)
@@ -337,12 +339,18 @@ class ChapterTranslator(
         maxDimension: Int = 768,
         streamProvider: () -> InputStream?,
     ): Bitmap? {
+        val bytes = try {
+            streamProvider()?.use { it.readBytes() }
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Failed to read bytes for bitmap" }
+            null
+        } ?: return null
+
         val options = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
         }
-        val openStream1 = streamProvider() ?: return null
         try {
-            openStream1.use { BitmapFactory.decodeStream(it, null, options) }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
         } catch (e: Exception) {
             logcat(LogPriority.WARN, e) { "Failed to decode image bounds" }
             return null
@@ -363,9 +371,8 @@ class ChapterTranslator(
             inPreferredConfig = Bitmap.Config.ARGB_8888
         }
 
-        val openStream2 = streamProvider() ?: return null
         return try {
-            openStream2.use { BitmapFactory.decodeStream(it, null, decodeOptions) }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
         } catch (e: Exception) {
             logcat(LogPriority.WARN, e) { "Failed to decode sampled image bitmap" }
             null

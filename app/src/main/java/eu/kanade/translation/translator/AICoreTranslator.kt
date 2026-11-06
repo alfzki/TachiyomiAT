@@ -53,10 +53,13 @@ class AICoreTranslator(
         pages: MutableMap<String, PageTranslation>,
         context: TranslationContext,
     ) {
+        logcat(LogPriority.INFO) { "AICore: translate called for ${pages.size} pages" }
         val generativeModel = getOrInitModel()
+        logcat(LogPriority.INFO) { "AICore: model obtained successfully" }
         val canUseSystemPrompt = systemPromptSupported ?: checkSystemPromptAvailable(generativeModel).also {
             systemPromptSupported = it
         }
+        logcat(LogPriority.INFO) { "AICore: canUseSystemPrompt = $canUseSystemPrompt" }
 
         val systemInstructionText = """
             You are an expert comic translator (manga, manhwa, manhua).
@@ -101,8 +104,11 @@ class AICoreTranslator(
             }
 
             val pageBitmap = if (useImageContext && multimediaSupported) {
+                logcat(LogPriority.INFO) { "AICore: loading page bitmap for $pageKey..." }
                 try {
-                    context.pageBitmapLoader?.invoke(pageKey)
+                    context.pageBitmapLoader?.invoke(pageKey).also {
+                        logcat(LogPriority.INFO) { "AICore: page bitmap loaded: ${it?.width}x${it?.height}" }
+                    }
                 } catch (e: Exception) {
                     logcat(LogPriority.WARN, e) { "Failed to load page bitmap for $pageKey" }
                     null
@@ -114,6 +120,9 @@ class AICoreTranslator(
             try {
                 var translations: List<String>? = null
                 try {
+                    logcat(LogPriority.INFO) {
+                        "AICore: executing page translation for $pageKey (${sortedBlocks.size} blocks)..."
+                    }
                     val response = executePrompt(
                         model = generativeModel,
                         prompt = fullPrompt,
@@ -121,11 +130,12 @@ class AICoreTranslator(
                         systemInstruction = systemInstruction,
                     )
                     val rawOutput = response.candidates.firstOrNull()?.text
+                    logcat(LogPriority.INFO) { "AICore: page translation raw output: $rawOutput" }
                     val parsed = parseJsonArrayResponse(rawOutput)
                     if (parsed != null && parsed.size == sortedBlocks.size) {
                         translations = parsed
                     }
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     logcat(LogPriority.WARN, e) { "AICore page translation failed, falling back to per-block" }
                 }
 
@@ -177,32 +187,72 @@ class AICoreTranslator(
     }
 
     private suspend fun checkSystemPromptAvailable(model: GenerativeModel): Boolean {
-        return try {
+        logcat(LogPriority.INFO) { "AICore: checkSystemPromptAvailable start" }
+        val result = try {
             model.getAvailableFeatures().contains(Feature.SYSTEM_PROMPT)
-        } catch (_: Throwable) {
-            @Suppress("DEPRECATION")
-            model.isSystemPromptAvailable()
+        } catch (t: Throwable) {
+            logcat(LogPriority.WARN, t) { "AICore: getAvailableFeatures threw, trying fallback" }
+            try {
+                @Suppress("DEPRECATION")
+                model.isSystemPromptAvailable()
+            } catch (t2: Throwable) {
+                logcat(LogPriority.WARN, t2) { "AICore: isSystemPromptAvailable threw, defaulting to false" }
+                false
+            }
         }
+        logcat(LogPriority.INFO) { "AICore: checkSystemPromptAvailable result = $result" }
+        return result
     }
 
     private suspend fun getOrInitModel(): GenerativeModel {
         val existing = model
         if (existing != null) return existing
 
-        val generativeModel = Generation.getClient()
-        val status = generativeModel.checkStatus()
+        logcat(LogPriority.INFO) { "AICore: getOrInitModel - calling Generation.getClient()" }
+        val generativeModel = try {
+            Generation.getClient()
+        } catch (t: Throwable) {
+            logcat(LogPriority.ERROR, t) { "AICore: Generation.getClient() failed" }
+            throw AICoreUnavailableException("Failed to initialize AICore client", t)
+        }
+
+        logcat(LogPriority.INFO) { "AICore: getOrInitModel - calling checkStatus()" }
+        val status = try {
+            generativeModel.checkStatus()
+        } catch (t: Throwable) {
+            logcat(LogPriority.ERROR, t) { "AICore: checkStatus() failed" }
+            throw AICoreUnavailableException("Failed to check AICore status", t)
+        }
+        logcat(LogPriority.INFO) { "AICore: getOrInitModel - status = $status" }
+
         if (status == FeatureStatus.UNAVAILABLE) {
             throw AICoreUnavailableException()
         }
         if (status == FeatureStatus.DOWNLOADABLE || status == FeatureStatus.DOWNLOADING) {
-            generativeModel.download().first { downloadStatus ->
-                if (downloadStatus is DownloadStatus.DownloadFailed) {
-                    throw AICoreUnavailableException("Failed to download AICore model", downloadStatus.e)
+            logcat(LogPriority.INFO) { "AICore: getOrInitModel - downloading model..." }
+            try {
+                generativeModel.download().first { downloadStatus ->
+                    logcat(LogPriority.INFO) { "AICore: download status: $downloadStatus" }
+                    if (downloadStatus is DownloadStatus.DownloadFailed) {
+                        throw AICoreUnavailableException("Failed to download AICore model", downloadStatus.e)
+                    }
+                    downloadStatus is DownloadStatus.DownloadCompleted
                 }
-                downloadStatus is DownloadStatus.DownloadCompleted
+            } catch (t: Throwable) {
+                if (t is AICoreUnavailableException) throw t
+                logcat(LogPriority.ERROR, t) { "AICore: download failed" }
+                throw AICoreUnavailableException("Failed to download AICore model", t)
             }
         }
-        generativeModel.warmup()
+
+        logcat(LogPriority.INFO) { "AICore: getOrInitModel - calling warmup()..." }
+        try {
+            generativeModel.warmup()
+            logcat(LogPriority.INFO) { "AICore: getOrInitModel - warmup() finished successfully" }
+        } catch (t: Throwable) {
+            logcat(LogPriority.WARN, t) { "AICore: warmup() threw exception, continuing without warmup" }
+        }
+
         model = generativeModel
         return generativeModel
     }
@@ -213,8 +263,12 @@ class AICoreTranslator(
         pageBitmap: Bitmap?,
         systemInstruction: SystemInstruction?,
     ): com.google.mlkit.genai.prompt.GenerateContentResponse {
+        logcat(LogPriority.INFO) {
+            "AICore: executePrompt - prompt length=${prompt.length}, bitmap=${pageBitmap != null}"
+        }
         val textPart = TextPart(prompt)
         if (pageBitmap != null && multimediaSupported) {
+            logcat(LogPriority.INFO) { "AICore: attempting multimodal call..." }
             val imagePart = ImagePart(pageBitmap)
             try {
                 val request = if (systemInstruction != null) {
@@ -228,13 +282,16 @@ class AICoreTranslator(
                         maxOutputTokens = clampedMaxOutputTokens
                     }
                 }
-                return model.generateContent(request)
-            } catch (e: Exception) {
+                val resp = model.generateContent(request)
+                logcat(LogPriority.INFO) { "AICore: multimodal call succeeded!" }
+                return resp
+            } catch (e: Throwable) {
                 logcat(LogPriority.WARN, e) { "AICore multimodal call failed, falling back to text-only" }
                 multimediaSupported = false
             }
         }
 
+        logcat(LogPriority.INFO) { "AICore: attempting text-only call..." }
         val request = if (systemInstruction != null) {
             generateContentRequest(systemInstruction, textPart) {
                 temperature = clampedTemperature
@@ -246,7 +303,9 @@ class AICoreTranslator(
                 maxOutputTokens = clampedMaxOutputTokens
             }
         }
-        return model.generateContent(request)
+        val resp = model.generateContent(request)
+        logcat(LogPriority.INFO) { "AICore: text-only call succeeded!" }
+        return resp
     }
 
     override fun close() {
