@@ -282,7 +282,9 @@ class WebtoonPageHolder(
     private fun onImageDecoded() {
         progressContainer.isVisible = false
         removeErrorLayout()
-        translationsView?.show()
+        if (showTranslations) {
+            translationsView?.show()
+        }
     }
 
     private fun addTranslationsView() {

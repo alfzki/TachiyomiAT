@@ -30,12 +30,20 @@ class GoogleTranslator(
         val access = getTranslateUrl(lang, text)
         val build: Request = Request.Builder().url(access).build()
         val newCall = okHttpClient.newCall(build)
-        val response = newCall.await()
-        val body = response.body
-        val string = body.string()
         try {
-            val jSONArray = JSONArray(string).getJSONArray(0).getJSONArray(0)
-            return jSONArray.getString(0)
+            val response = newCall.await()
+            val string = response.use { it.body.string() }
+            val jSONArray = JSONArray(string).getJSONArray(0)
+            val result = StringBuilder()
+            for (i in 0 until jSONArray.length()) {
+                val part = jSONArray.optJSONArray(i)?.optString(0)
+                if (!part.isNullOrEmpty()) {
+                    result.append(part)
+                }
+            }
+            return result.toString().ifEmpty {
+                JSONArray(string).getJSONArray(0).getJSONArray(0).getString(0)
+            }
         } catch (e: Exception) {
             logcat { "Image Translation Error : $e" }
         }

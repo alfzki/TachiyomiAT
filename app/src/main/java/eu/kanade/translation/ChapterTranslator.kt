@@ -72,13 +72,14 @@ class ChapterTranslator(
 
     private var textRecognizer: TextRecognizer
     private var textTranslator: TextTranslator
+    private var currentEngine: TextTranslators
 
     init {
         val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
         val toLang = TextTranslatorLanguage.fromPref(translationPreferences.translateToLanguage())
         textRecognizer = TextRecognizer(fromLang)
-        textTranslator = TextTranslators.fromPref(translationPreferences.translationEngine())
-            .build(translationPreferences, fromLang, toLang)
+        currentEngine = TextTranslators.fromPref(translationPreferences.translationEngine())
+        textTranslator = currentEngine.build(translationPreferences, fromLang, toLang)
     }
 
     fun start(): Boolean {
@@ -175,7 +176,14 @@ class ChapterTranslator(
     suspend fun queueChapter(manga: Manga, chapter: Chapter) {
         val source = sourceManager.get(manga.source) as? HttpSource ?: return
         if (provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source) != null) return
-        if (queueState.value.any { it.chapter.id == chapter.id }) return
+        val existing = queueState.value.find { it.chapter.id == chapter.id }
+        if (existing != null) {
+            if (existing.status == Translation.State.ERROR) {
+                existing.status = Translation.State.QUEUE
+                start()
+            }
+            return
+        }
         val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
         val toLang = TextTranslatorLanguage.fromPref(translationPreferences.translateToLanguage())
         val engine = TextTranslators.fromPref(translationPreferences.translationEngine())
@@ -195,12 +203,20 @@ class ChapterTranslator(
                 textRecognizer = TextRecognizer(translation.fromLang)
             }
             // Check if translator reinitialization is needed
-            if (translation.fromLang != textTranslator.fromLang || translation.toLang != textTranslator.toLang) {
+            val selectedEngine = TextTranslators.fromPref(translationPreferences.translationEngine())
+            if (translation.fromLang != textTranslator.fromLang ||
+                translation.toLang != textTranslator.toLang ||
+                selectedEngine != currentEngine
+            ) {
                 withContext(Dispatchers.IO) {
                     textTranslator.close()
                 }
-                textTranslator = TextTranslators.fromPref(translationPreferences.translationEngine())
-                    .build(translationPreferences, translation.fromLang, translation.toLang)
+                currentEngine = selectedEngine
+                textTranslator = selectedEngine.build(
+                    translationPreferences,
+                    translation.fromLang,
+                    translation.toLang,
+                )
             }
             // Directory where translations for a manga is stored
             val translationMangaDir = provider.getMangaDir(translation.manga.title, translation.source)
@@ -215,33 +231,61 @@ class ChapterTranslator(
                 chapterUrl = translation.chapter.url,
                 mangaTitle = translation.manga.title,
                 source = translation.source,
-            )!!
+            ) ?: run {
+                translation.status = Translation.State.ERROR
+                return
+            }
 
             val pages = mutableMapOf<String, PageTranslation>()
-            val tmpFile = translationMangaDir.createFile("tmp")!!
-            val streams = getChapterPages(chapterPath)
-            /**
-             * saving the stream to tmp file cuz i can't get the
-             * BitmapFactory.decodeStream() to work with the stream from .cbz archive
-             */
-            withContext(Dispatchers.IO) {
-                for ((fileName, streamFn) in streams) {
-                    coroutineContext.ensureActive()
-                    streamFn().use { tmpFile.openOutputStream().use { out -> it.copyTo(out) } }
-                    val image = InputImage.fromFilePath(context, tmpFile.uri)
-                    val result = textRecognizer.recognize(image)
-                    val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
-                    val pageTranslation = convertToPageTranslation(blocks, image.width, image.height)
-                    if (pageTranslation.blocks.isNotEmpty()) pages[fileName] = pageTranslation
+            val tmpFile = java.io.File.createTempFile("at_trans_", ".tmp", context.cacheDir)
+            try {
+                withContext(Dispatchers.IO) {
+                    if (chapterPath.isFile) {
+                        chapterPath.archiveReader(context).use { reader ->
+                            val entries = reader.useEntries { entries ->
+                                entries.filter { it.isFile && ImageUtil.isImage(it.name) { reader.getInputStream(it.name)!! } }
+                                    .sortedWith { f1, f2 -> f1.name.compareToCaseInsensitiveNaturalOrder(f2.name) }
+                                    .map { it.name }
+                                    .toList()
+                            }
+                            for (entryName in entries) {
+                                coroutineContext.ensureActive()
+                                reader.getInputStream(entryName)!!.use { inStream ->
+                                    tmpFile.outputStream().use { outStream -> inStream.copyTo(outStream) }
+                                }
+                                val image = InputImage.fromFilePath(context, android.net.Uri.fromFile(tmpFile))
+                                val result = textRecognizer.recognize(image)
+                                val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
+                                val pageTranslation = convertToPageTranslation(blocks, image.width, image.height)
+                                if (pageTranslation.blocks.isNotEmpty()) pages[entryName] = pageTranslation
+                            }
+                        }
+                    } else {
+                        val files = chapterPath.listFiles().orEmpty()
+                            .filter { ImageUtil.isImage(it.name) }
+                            .sortedWith { f1, f2 -> f1.name.orEmpty().compareToCaseInsensitiveNaturalOrder(f2.name.orEmpty()) }
+                        for (file in files) {
+                            coroutineContext.ensureActive()
+                            file.openInputStream().use { inStream ->
+                                tmpFile.outputStream().use { outStream -> inStream.copyTo(outStream) }
+                            }
+                            val image = InputImage.fromFilePath(context, android.net.Uri.fromFile(tmpFile))
+                            val result = textRecognizer.recognize(image)
+                            val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
+                            val pageTranslation = convertToPageTranslation(blocks, image.width, image.height)
+                            if (pageTranslation.blocks.isNotEmpty()) pages[file.name!!] = pageTranslation
+                        }
+                    }
+
+                    // Translate the text in blocks , this mutates the original blocks
+                    textTranslator.translate(pages)
                 }
-            }
-            tmpFile.delete()
-            withContext(Dispatchers.IO) {
-                // Translate the text in blocks , this mutates the original blocks
-                textTranslator.translate(pages)
+            } finally {
+                tmpFile.delete()
             }
             // Serialize the Map and save to translations json file
-            Json.encodeToStream(pages, translationMangaDir.createFile(saveFile)!!.openOutputStream())
+            val targetFile = translationMangaDir.findFile(saveFile) ?: translationMangaDir.createFile(saveFile)!!
+            Json.encodeToStream(pages, targetFile.openOutputStream())
             translation.status = Translation.State.TRANSLATED
         } catch (error: Throwable) {
             translation.status = Translation.State.ERROR
@@ -252,16 +296,23 @@ class ChapterTranslator(
     private fun convertToPageTranslation(blocks: List<Text.TextBlock>, width: Int, height: Int): PageTranslation {
         val translation = PageTranslation(imgWidth = width.toFloat(), imgHeight = height.toFloat())
         for (block in blocks) {
-            val bounds = block.boundingBox!!
-            val symBounds = block.lines.first().elements.first().symbols.first().boundingBox!!
+            val bounds = block.boundingBox ?: continue
+            val firstLine = block.lines.firstOrNull()
+            val firstElement = firstLine?.elements?.firstOrNull()
+            val firstSymbol = firstElement?.symbols?.firstOrNull()
+            val symBounds = firstSymbol?.boundingBox ?: firstElement?.boundingBox
+            val symWidth = symBounds?.width()?.toFloat() ?: (bounds.width().toFloat() / maxOf(1, block.text.length))
+            val symHeight = symBounds?.height()?.toFloat() ?: bounds.height().toFloat()
+            val angle = firstLine?.angle ?: 0f
+
             translation.blocks.add(
                 TranslationBlock(
                     text = block.text,
                     width = bounds.width().toFloat(),
                     height = bounds.height().toFloat(),
-                    symWidth = symBounds.width().toFloat(),
-                    symHeight = symBounds.height().toFloat(),
-                    angle = block.lines.first().angle,
+                    symWidth = symWidth,
+                    symHeight = symHeight,
+                    angle = angle,
                     x = bounds.left.toFloat(),
                     y = bounds.top.toFloat(),
                 ),
@@ -324,22 +375,6 @@ class ChapterTranslator(
         )
     }
 
-    private fun getChapterPages(chapterPath: UniFile): List<Pair<String, () -> InputStream>> {
-        if (chapterPath.isFile) {
-            val reader = chapterPath.archiveReader(context)
-            return reader.useEntries { entries ->
-                entries.filter { it.isFile && ImageUtil.isImage(it.name) { reader.getInputStream(it.name)!! } }
-                    .sortedWith { f1, f2 -> f1.name.compareToCaseInsensitiveNaturalOrder(f2.name) }.map { entry ->
-                        Pair(entry.name) { reader.getInputStream(entry.name)!! }
-                    }.toList()
-            }
-        } else {
-            return chapterPath.listFiles()!!.filter { ImageUtil.isImage(it.name) }.map { entry ->
-                Pair(entry.name!!) { entry.openInputStream() }
-            }.toList()
-        }
-    }
-
     private fun areAllTranslationsFinished(): Boolean {
         return queueState.value.none { it.status.value <= Translation.State.TRANSLATING.value }
     }
@@ -353,7 +388,10 @@ class ChapterTranslator(
 
     private fun removeFromQueue(translation: Translation) {
         _queueState.update {
-            if (translation.status == Translation.State.TRANSLATING || translation.status == Translation.State.QUEUE) {
+            if (translation.status == Translation.State.TRANSLATING ||
+                translation.status == Translation.State.QUEUE ||
+                translation.status == Translation.State.ERROR
+            ) {
                 translation.status = Translation.State.NOT_TRANSLATED
             }
             it - translation
@@ -365,7 +403,8 @@ class ChapterTranslator(
             val translations = queue.filter { predicate(it) }
             translations.forEach { translation ->
                 if (translation.status == Translation.State.TRANSLATING ||
-                    translation.status == Translation.State.QUEUE
+                    translation.status == Translation.State.QUEUE ||
+                    translation.status == Translation.State.ERROR
                 ) {
                     translation.status = Translation.State.NOT_TRANSLATED
                 }
@@ -386,7 +425,8 @@ class ChapterTranslator(
         _queueState.update {
             it.forEach { translation ->
                 if (translation.status == Translation.State.TRANSLATING ||
-                    translation.status == Translation.State.QUEUE
+                    translation.status == Translation.State.QUEUE ||
+                    translation.status == Translation.State.ERROR
                 ) {
                     translation.status = Translation.State.NOT_TRANSLATED
                 }

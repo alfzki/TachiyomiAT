@@ -203,6 +203,10 @@ class MangaViewModel(
         val queuedChapterIds = queue.mapTo(HashSet()) { it.chapter.id }
         states.filterKeys { it in queuedChapterIds }
     }
+    private val queuedTranslationStates = combine(translationStates, translationManager.queueState) { states, queue ->
+        val queuedChapterIds = queue.mapTo(HashSet()) { it.chapter.id }
+        states.filterKeys { it in queuedChapterIds }
+    }
 
     private val hideMissingChapters = libraryPreferences.hideMissingChapters.get()
 
@@ -225,7 +229,8 @@ class MangaViewModel(
         downloadCache.changes.pausedWhileUnsubscribed(),
         downloadManager.queueState.pausedWhileUnsubscribed(),
         translationManager.queueState.pausedWhileUnsubscribed(),
-    ) { (manga, chapters), _, _, _ ->
+        translationManager.changes.pausedWhileUnsubscribed(),
+    ) { (manga, chapters), _, _, _, _ ->
         val source = sourceManager.getOrStub(manga.source)
         MangaAndChapters(
             manga = manga,
@@ -260,7 +265,11 @@ class MangaViewModel(
         mangaAndChapters,
         scanlators,
         trackers,
-        combine(selectedChapterIds, queuedDownloadStates.pausedWhileUnsubscribed(), translationStates) { selected, downloads, translations ->
+        combine(
+            selectedChapterIds,
+            queuedDownloadStates.pausedWhileUnsubscribed(),
+            queuedTranslationStates.pausedWhileUnsubscribed(),
+        ) { selected, downloads, translations ->
             Triple(selected, downloads, translations)
         },
         combine(dialog, isRefreshingData, ::Pair),
@@ -518,7 +527,11 @@ class MangaViewModel(
      */
     private fun deleteDownloads() {
         val state = successState ?: return
-        appScope.launch { downloadManager.deleteManga(state.manga, state.source) }
+        appScope.launch {
+            downloadManager.deleteManga(state.manga, state.source)
+            translationManager.deleteManga(state.manga, state.source)
+            translationStates.update { emptyMap() }
+        }
     }
 
     /**
@@ -796,7 +809,7 @@ class MangaViewModel(
                             state.manga,
                             state.source,
                         )
-                        translationStates.update { it + (item.id to Translation.State.NOT_TRANSLATED) }
+                        translationStates.update { it - item.id }
                     } catch (e: Throwable) {
                         logcat(LogPriority.ERROR, e)
                     }
@@ -938,6 +951,7 @@ class MangaViewModel(
                 chapters.forEach { chapter ->
                     translationManager.deleteTranslation(chapter, state.manga, state.source)
                 }
+                translationStates.update { it - chapters.map { c -> c.id }.toSet() }
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e)
             }

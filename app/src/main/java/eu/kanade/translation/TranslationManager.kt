@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.emitAll
@@ -21,6 +22,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -40,6 +43,15 @@ class TranslationManager(
     private val translationPreferences: TranslationPreferences,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val _changes = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+    val changes: Flow<Unit> = _changes.receiveAsFlow()
+        .onStart { emit(Unit) }
+        .shareIn(scope, kotlinx.coroutines.flow.SharingStarted.Lazily, 1)
+
+    fun invalidate() {
+        _changes.trySend(Unit)
+    }
 
     private val translator = ChapterTranslator(
         context = context,
@@ -163,6 +175,7 @@ class TranslationManager(
             removeFromTranslationQueue(chapter)
             val file = provider.findTranslationFile(chapter.name, chapter.scanlator, manga.title, source)
             file?.delete()
+            invalidate()
         }
     }
 
@@ -176,6 +189,7 @@ class TranslationManager(
             if (sourceDir?.listFiles()?.isEmpty() == true) {
                 sourceDir.delete()
             }
+            invalidate()
         }
     }
 

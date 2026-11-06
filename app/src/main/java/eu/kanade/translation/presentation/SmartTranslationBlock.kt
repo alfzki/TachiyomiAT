@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -45,10 +43,9 @@ fun SmartTranslationBlock(
             .requiredSize(width, height),
     ) {
         val density = LocalDensity.current
-        val fontSize = remember { mutableStateOf(16.sp) }
         SubcomposeLayout { constraints ->
-            val maxWidthPx = with(density) { width.roundToPx() }
-            val maxHeightPx = with(density) { height.roundToPx() }
+            val maxWidthPx = maxOf(1, with(density) { width.roundToPx() })
+            val maxHeightPx = maxOf(1, with(density) { height.roundToPx() })
 
             // Binary search for optimal font size
             var low = 1
@@ -81,13 +78,12 @@ fun SmartTranslationBlock(
                     high = mid - 1
                 }
             }
-            fontSize.value = bestSize.sp
 
             // Measure final layout
             val textPlaceable = subcompose(Unit) {
                 Text(
                     text = block.translation,
-                    fontSize = fontSize.value,
+                    fontSize = bestSize.sp,
                     fontFamily = fontFamily,
                     color = Color.Black,
                     softWrap = true,
@@ -98,7 +94,6 @@ fun SmartTranslationBlock(
                         .width(width)
                         .rotate(if (isVertical) 0f else block.angle)
                         .align(Alignment.Center),
-//                        .background(color = Color.Blue),
                 )
             }[0].measure(constraints)
 

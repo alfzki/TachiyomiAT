@@ -92,8 +92,11 @@ class OpenRouterTranslator(
                     "Bearer $apiKey",
                 ).header("Content-Type", "application/json").post(body).build()
             val response = okHttpClient.newCall(build).await()
-            val rBody = response.body
-            val json2 = JSONObject(rBody.string())
+            val responseString = response.use { it.body.string() }
+            if (!response.isSuccessful) {
+                throw Exception("OpenRouter API error (${response.code}): $responseString")
+            }
+            val json2 = JSONObject(responseString)
             val resJson =
                 JSONObject(json2.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content"))
 
