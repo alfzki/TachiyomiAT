@@ -55,11 +55,15 @@ class GoogleTranslator(
             val client = client1
             val calculateToken = calculateToken(text)
             val encode: String = URLEncoder.encode(text, "utf-8")
-            return "https://translate.google.com/translate_a/single?client=$client&sl=auto&tl=$lang&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&dt=rw&dt=rm&dt=ss&dt=t&otf=1&ssel=0&tsel=0&kc=1&tk=$calculateToken&q=$encode"
+            return "https://translate.google.com/translate_a/single?client=$client&sl=auto&tl=$lang" +
+                "&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&dt=rw&dt=rm&dt=ss&dt=t&otf=1&ssel=0&tsel=0" +
+                "&kc=1&tk=$calculateToken&q=$encode"
         } catch (unused: UnsupportedEncodingException) {
             val client2 = client1
             val calculateToken2 = calculateToken(text)
-            return "https://translate.google.com/translate_a/single?client=$client2&sl=auto&tl=$lang&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&dt=rw&dt=rm&dt=ss&dt=t&otf=1&ssel=0&tsel=0&kc=1&tk=$calculateToken2&q=$text"
+            return "https://translate.google.com/translate_a/single?client=$client2&sl=auto&tl=$lang" +
+                "&dt=at&dt=bd&dt=ex&dt=ld&dt=md&dt=qca&dt=rw&dt=rm&dt=ss&dt=t&otf=1&ssel=0&tsel=0" +
+                "&kc=1&tk=$calculateToken2&q=$text"
         }
     }
 
@@ -97,9 +101,9 @@ class GoogleTranslator(
 
         var j: Long = 406644
         for (num in list) {
-            j = RL(j + num.toLong(), "+-a^+6")
+            j = rl(j + num.toLong(), "+-a^+6")
         }
-        var rL = RL(j, "+-3^+b+-f") xor 3293161072L
+        var rL = rl(j, "+-3^+b+-f") xor 3293161072L
         if (rL < 0) {
             rL = (rL and 2147483647L) + 2147483648L
         }
@@ -107,7 +111,7 @@ class GoogleTranslator(
         return "$j2.${406644L xor j2}"
     }
 
-    private fun RL(j: Long, str: String): Long {
+    private fun rl(j: Long, str: String): Long {
         var result = j
         var i = 0
         while (i < str.length - 2) {
@@ -119,8 +123,6 @@ class GoogleTranslator(
         return result
     }
 
-
     override fun close() {
     }
-
 }

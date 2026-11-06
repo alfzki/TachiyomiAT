@@ -13,14 +13,14 @@ import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
 import eu.kanade.translation.model.PageTranslation
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
-import tachiyomi.core.common.util.system.logcat
 import org.json.JSONObject
+import tachiyomi.core.common.util.system.logcat
 @Suppress
 class GeminiTranslator(
     override val fromLang: TextRecognizerLanguage,
     override val toLang: TextTranslatorLanguage,
-     apiKey: String,
-     modelName: String,
+    apiKey: String,
+    modelName: String,
     val maxOutputToken: Int,
     val temp: Float,
 ) : TextTranslator {
@@ -43,42 +43,36 @@ class GeminiTranslator(
         ),
         systemInstruction = content {
             text(
-                "## System Prompt for Manhwa/Manga/Manhua Translation\n" +
-                    "\n" +
-                    "You are a highly skilled AI tasked with translating text from scanned images of comics (manhwa, manga, manhua) while preserving the original structure and removing any watermarks or site links. \n" +
-                    "\n" +
-                    "**Here's how you should operate:**\n" +
-                    "\n" +
-                    "1. **Input:** You'll receive a JSON object where keys are image filenames (e.g., \"001.jpg\") and values are lists of text strings extracted from those images.\n" +
-                    "\n" +
-                    "2. **Translation:** Translate all text strings to the target language `${toLang.label}`. Ensure the translation is natural and fluent, adapting idioms and expressions to fit the target language's cultural context.\n" +
-                    "\n" +
-                    "3. **Watermark/Site Link Removal:** Replace any watermarks or site links (e.g., \"colamanga.com\") with the placeholder \"RTMTH\".\n" +
-                    "\n" +
-                    "4. **Structure Preservation:** Maintain the exact same structure as the input JSON. The output JSON should have the same number of keys (image filenames) and the same number of text strings within each list.\n" +
-                    "\n" +
-                    "**Example:**\n" +
-                    "\n" +
-                    "**Input:**\n" +
-                    "\n" +
+                "## System Prompt for Manhwa/Manga/Manhua Translation\n\n" +
+                    "You are a highly skilled AI tasked with translating text from scanned images " +
+                    "of comics (manhwa, manga, manhua) while preserving the original structure " +
+                    "and removing any watermarks or site links. \n\n" +
+                    "**Here's how you should operate:**\n\n" +
+                    "1. **Input:** You'll receive a JSON object where keys are image filenames (e.g., \"001.jpg\") " +
+                    "and values are lists of text strings extracted from those images.\n\n" +
+                    "2. **Translation:** Translate all text strings to the target language `${toLang.label}`. " +
+                    "Ensure the translation is natural and fluent, adapting idioms and expressions " +
+                    "to fit the target language's cultural context.\n\n" +
+                    "3. **Watermark/Site Link Removal:** Replace any watermarks or site links (e.g., " +
+                    "\"colamanga.com\") with the placeholder \"RTMTH\".\n\n" +
+                    "4. **Structure Preservation:** Maintain the exact same structure as the input JSON. " +
+                    "The output JSON should have the same number of keys (image filenames) and the " +
+                    "same number of text strings within each list.\n\n" +
+                    "**Example:**\n\n" +
+                    "**Input:**\n\n" +
                     "```json\n" +
                     "{\"001.jpg\":[\"chinese1\",\"chinese2\"],\"002.jpg\":[\"chinese2\",\"colamanga.com\"]}\n" +
-                    "```\n" +
-                    "\n" +
-                    "**Output (for `${toLang.label}` = English):**\n" +
-                    "\n" +
+                    "```\n\n" +
+                    "**Output (for `${toLang.label}` = English):**\n\n" +
                     "```json\n" +
                     "{\"001.jpg\":[\"eng1\",\"eng2\"],\"002.jpg\":[\"eng2\",\"RTMTH\"]}\n" +
-                    "```\n" +
-                    "\n" +
-                    "**Key Points:**\n" +
-                    "\n" +
+                    "```\n\n" +
+                    "**Key Points:**\n\n" +
                     "* Prioritize accurate and natural-sounding translations.\n" +
                     "* Be meticulous in removing all watermarks and site links.\n" +
                     "* Ensure the output JSON structure perfectly mirrors the input structure.\n" +
                     "Return {[key:string]:Array<String>}",
-
-                )
+            )
         },
     )
 
@@ -106,6 +100,4 @@ class GeminiTranslator(
 
     override fun close() {
     }
-
-
 }

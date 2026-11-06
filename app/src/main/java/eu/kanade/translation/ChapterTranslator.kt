@@ -243,7 +243,10 @@ class ChapterTranslator(
                     if (chapterPath.isFile) {
                         chapterPath.archiveReader(context).use { reader ->
                             val entries = reader.useEntries { entries ->
-                                entries.filter { it.isFile && ImageUtil.isImage(it.name) { reader.getInputStream(it.name)!! } }
+                                entries.filter {
+                                    it.isFile &&
+                                        ImageUtil.isImage(it.name) { reader.getInputStream(it.name)!! }
+                                }
                                     .sortedWith { f1, f2 -> f1.name.compareToCaseInsensitiveNaturalOrder(f2.name) }
                                     .map { it.name }
                                     .toList()
@@ -263,7 +266,9 @@ class ChapterTranslator(
                     } else {
                         val files = chapterPath.listFiles().orEmpty()
                             .filter { ImageUtil.isImage(it.name) }
-                            .sortedWith { f1, f2 -> f1.name.orEmpty().compareToCaseInsensitiveNaturalOrder(f2.name.orEmpty()) }
+                            .sortedWith { f1, f2 ->
+                                f1.name.orEmpty().compareToCaseInsensitiveNaturalOrder(f2.name.orEmpty())
+                            }
                         for (file in files) {
                             coroutineContext.ensureActive()
                             file.openInputStream().use { inStream ->

@@ -8,12 +8,12 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
-import tachiyomi.core.common.util.system.logcat
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import tachiyomi.core.common.util.system.logcat
 
 class OpenRouterTranslator(
     override val fromLang: TextRecognizerLanguage,
@@ -25,7 +25,6 @@ class OpenRouterTranslator(
 ) : TextTranslator {
     private val okHttpClient = OkHttpClient()
     override suspend fun translate(pages: MutableMap<String, PageTranslation>) {
-
         try {
             val data = pages.mapValues { (k, v) -> v.blocks.map { b -> b.text } }
             val json = JSONObject(data)
@@ -42,36 +41,34 @@ class OpenRouterTranslator(
                         put("role", "system")
                         put(
                             "content",
-                            "## System Prompt for Manhwa/Manga/Manhua Translation\n" +
-                                "\n" +
-                                "You are a highly skilled AI tasked with translating text from scanned images of comics (manhwa, manga, manhua) while preserving the original structure and removing any watermarks or site links. \n" +
-                                "\n" +
-                                "**Here's how you should operate:**\n" +
-                                "\n" +
-                                "1. **Input:** You'll receive a JSON object where keys are image filenames (e.g., \"001.jpg\") and values are lists of text strings extracted from those images.\n" +
-                                "\n" +
-                                "2. **Translation:** Translate all text strings to the target language `${toLang.label}`. Ensure the translation is natural and fluent, adapting idioms and expressions to fit the target language's cultural context.\n" +
-                                "\n" +
-                                "3. **Watermark/Site Link Removal:** Replace any watermarks or site links (e.g., \"colamanga.com\") with the placeholder \"RTMTH\".\n" +
-                                "\n" +
-                                "4. **Structure Preservation:** Maintain the exact same structure as the input JSON. The output JSON should have the same number of keys (image filenames) and the same number of text strings within each list.\n" +
-                                "\n" +
-                                "**Example:**\n" +
-                                "\n" +
-                                "**Input:**\n" +
-                                "\n" +
+                            "## System Prompt for Manhwa/Manga/Manhua Translation\n\n" +
+                                "You are a highly skilled AI tasked with translating text from scanned images " +
+                                "of comics (manhwa, manga, manhua) while preserving the original structure " +
+                                "and removing any watermarks or site links. \n\n" +
+                                "**Here's how you should operate:**\n\n" +
+                                "1. **Input:** You'll receive a JSON object where keys are image filenames " +
+                                "(e.g., \"001.jpg\") and values are lists of text strings extracted " +
+                                "from those images.\n\n" +
+                                "2. **Translation:** Translate all text strings to the target language " +
+                                "`${toLang.label}`. Ensure the translation is natural and fluent, adapting idioms " +
+                                "and expressions to fit the target language's cultural context.\n\n" +
+                                "3. **Watermark/Site Link Removal:** Replace any watermarks or site links (e.g., " +
+                                "\"colamanga.com\") with the placeholder \"RTMTH\".\n\n" +
+                                "4. **Structure Preservation:** Maintain the exact same structure as the " +
+                                "input JSON. The output JSON should have the same number of keys (image filenames) " +
+                                "and the same number of text strings within each list.\n\n" +
+                                "**Example:**\n\n" +
+                                "**Input:**\n\n" +
                                 "```json\n" +
-                                "{\"001.jpg\":[\"chinese1\",\"chinese2\"],\"002.jpg\":[\"chinese2\",\"colamanga.com\"]}\n" +
-                                "```\n" +
-                                "\n" +
-                                "**Output (for `${toLang.label}` = English):**\n" +
-                                "\n" +
+                                "{\"001.jpg\":[\"chinese1\",\"chinese2\"]," +
+                                "\"002.jpg\":[\"chinese2\",\"colamanga.com\"]}\n" +
+                                "```\n\n" +
+                                "**Output (for `${toLang.label}` = English):**\n\n" +
                                 "```json\n" +
-                                "{\"001.jpg\":[\"eng1\",\"eng2\"],\"002.jpg\":[\"eng2\",\"RTMTH\"]}\n" +
-                                "```\n" +
-                                "\n" +
-                                "**Key Points:**\n" +
-                                "\n" +
+                                "{\"001.jpg\":[\"eng1\",\"eng2\"]," +
+                                "\"002.jpg\":[\"eng2\",\"RTMTH\"]}\n" +
+                                "```\n\n" +
+                                "**Key Points:**\n\n" +
                                 "* Prioritize accurate and natural-sounding translations.\n" +
                                 "* Be meticulous in removing all watermarks and site links.\n" +
                                 "* Ensure the output JSON structure perfectly mirrors the input structure.",
@@ -82,7 +79,6 @@ class OpenRouterTranslator(
                         put("content", "JSON $json")
                     }
                 }
-
             }.toString()
             val body = jsonObject.toRequestBody(mediaType)
             val access = "https://openrouter.ai/api/v1/chat/completions"
@@ -110,8 +106,6 @@ class OpenRouterTranslator(
                 v.blocks =
                     v.blocks.filterNot { it.translation.contains("RTMTH") }.toMutableList()
             }
-
-
         } catch (e: Exception) {
             logcat { "Image Translation Error : ${e.stackTraceToString()}" }
             throw e
@@ -120,6 +114,4 @@ class OpenRouterTranslator(
 
     override fun close() {
     }
-
-
 }

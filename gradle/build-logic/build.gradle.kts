@@ -16,7 +16,6 @@ kotlin {
     }
 }
 
-
 // Configuration should be synced with [/gradle/build-logic/src/main/kotlin/PluginSpotless.kt]
 val ktlintVersion = libs.ktlint.bom.get().version
 val editorConfigFile = rootProject.file("../../.editorconfig")
