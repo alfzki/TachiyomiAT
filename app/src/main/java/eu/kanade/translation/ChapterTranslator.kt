@@ -17,10 +17,12 @@ import eu.kanade.translation.model.TranslationBlock
 import eu.kanade.translation.model.TranslationContext
 import eu.kanade.translation.recognizer.TextRecognizer
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
+import eu.kanade.translation.translator.AICoreTranslator
 import eu.kanade.translation.translator.AICoreUnavailableException
 import eu.kanade.translation.translator.TextTranslator
 import eu.kanade.translation.translator.TextTranslatorLanguage
 import eu.kanade.translation.translator.TextTranslators
+import eu.kanade.translation.util.ComicTextPreprocessor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -291,7 +293,8 @@ class ChapterTranslator(
                                 val image = InputImage.fromFilePath(context, android.net.Uri.fromFile(tmpFile))
                                 val result = textRecognizer.recognize(image)
                                 val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
-                                val pageTranslation = convertToPageTranslation(blocks, image.width, image.height)
+                                val pageTranslation =
+                                    convertToPageTranslation(blocks, image.width, image.height, translation.fromLang)
                                 if (pageTranslation.blocks.isNotEmpty()) pages[entryName] = pageTranslation
                             }
 
@@ -322,7 +325,8 @@ class ChapterTranslator(
                             val image = InputImage.fromFilePath(context, android.net.Uri.fromFile(tmpFile))
                             val result = textRecognizer.recognize(image)
                             val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
-                            val pageTranslation = convertToPageTranslation(blocks, image.width, image.height)
+                            val pageTranslation =
+                                convertToPageTranslation(blocks, image.width, image.height, translation.fromLang)
                             if (pageTranslation.blocks.isNotEmpty()) pages[file.name!!] = pageTranslation
                         }
 
@@ -405,21 +409,29 @@ class ChapterTranslator(
         }
     }
 
-    private fun convertToPageTranslation(blocks: List<Text.TextBlock>, width: Int, height: Int): PageTranslation {
+    private fun convertToPageTranslation(
+        blocks: List<Text.TextBlock>,
+        width: Int,
+        height: Int,
+        fromLang: TextRecognizerLanguage,
+    ): PageTranslation {
         val translation = PageTranslation(imgWidth = width.toFloat(), imgHeight = height.toFloat())
         for (block in blocks) {
             val bounds = block.boundingBox ?: continue
+            val cleanText = ComicTextPreprocessor.preprocessOcrBlockText(block.text)
+            if (ComicTextPreprocessor.isLikelyOcrNoiseOrWatermark(cleanText)) continue
+
             val firstLine = block.lines.firstOrNull()
             val firstElement = firstLine?.elements?.firstOrNull()
             val firstSymbol = firstElement?.symbols?.firstOrNull()
             val symBounds = firstSymbol?.boundingBox ?: firstElement?.boundingBox
-            val symWidth = symBounds?.width()?.toFloat() ?: (bounds.width().toFloat() / maxOf(1, block.text.length))
+            val symWidth = symBounds?.width()?.toFloat() ?: (bounds.width().toFloat() / maxOf(1, cleanText.length))
             val symHeight = symBounds?.height()?.toFloat() ?: bounds.height().toFloat()
             val angle = firstLine?.angle ?: 0f
 
             translation.blocks.add(
                 TranslationBlock(
-                    text = block.text,
+                    text = cleanText,
                     width = bounds.width().toFloat(),
                     height = bounds.height().toFloat(),
                     symWidth = symWidth,
@@ -431,7 +443,17 @@ class ChapterTranslator(
             )
         }
         // Smart merge overlapping text blocks
-        translation.blocks = smartMergeBlocks(translation.blocks, 50, 30, 30)
+        val mergedBlocks = smartMergeBlocks(translation.blocks, 50, 30, 30)
+        val cleanedBlocks = mergedBlocks.mapNotNull { block ->
+            val cleaned = ComicTextPreprocessor.preprocessOcrBlockText(block.text)
+            if (ComicTextPreprocessor.isLikelyOcrNoiseOrWatermark(cleaned)) {
+                null
+            } else {
+                block.copy(text = cleaned)
+            }
+        }
+        // Sort in comic reading order
+        translation.blocks = AICoreTranslator.sortBlocksInReadingOrder(cleanedBlocks, fromLang).toMutableList()
 
         return translation
     }

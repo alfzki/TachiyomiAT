@@ -15,6 +15,7 @@ import eu.kanade.translation.model.PageTranslation
 import eu.kanade.translation.model.TranslationBlock
 import eu.kanade.translation.model.TranslationContext
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
+import eu.kanade.translation.util.ComicTextPreprocessor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.encodeToString
@@ -348,12 +349,7 @@ class AICoreTranslator(
         }
 
         fun normalizeOcrText(text: String): String {
-            return text
-                .replace(Regex("-\\s*\\n\\s*"), "")
-                .replace('\r', ' ')
-                .replace('\n', ' ')
-                .replace(Regex("\\s+"), " ")
-                .trim()
+            return ComicTextPreprocessor.preprocessOcrBlockText(text)
         }
 
         fun buildSystemInstruction(targetLangName: String): String {
@@ -363,11 +359,13 @@ class AICoreTranslator(
 
                 Strict rules:
                 1. Automatically infer and fix comic OCR character misreads (e.g. "SD WH" -> "SO WHY", "ANYNATSP" -> "ANYWAYS?", "VY" -> "MY", "HON" -> "HOW", "PEAL" -> "DEAL", "SLDNLH" -> "SLOWLY", confusing '0'/'O', '1'/'I'/'l').
-                2. Translate into natural, idiomatic, conversational $targetLangName suitable for comics/manhwa (avoid stiff word-for-word translation, e.g. avoid translating "It's why" as "It adalah alasannya").
-                3. Keep established comic/manhwa terminology natural and consistent (e.g., Hunter, Gate, Dungeon, Raid, Guild, Rank, Mana, Boss, Awakening, Status Window).
-                4. Replace any watermarks, translator credits, or website URLs (e.g. scanlation credits or domain names like "*.com") with "RTMTH".
-                5. Return ONLY a valid JSON array of strings matching the exact number and order of input blocks: ["translation 1", "translation 2", ...].
-                6. Do NOT include markdown formatting, code fences (```), or explanations. Never include raw unescaped newlines inside the JSON strings.
+                2. Translate idioms and expressions by their true conversational meaning, NEVER word-for-word literal calques (e.g., "Grab any student on the street and ask" -> "Coba tanya siswa mana pun di jalanan", NOT "Ambil semua siswa di jalanan"; "He got hurt this badly?" -> "Dia terluka separah ini?", NOT "Dia sangat sertai luka?"; "At this point, it's a miracle he's still alive" -> "Sampai tahap ini, bisa selamat saja sudah keajaiban").
+                3. Maintain consistent character pronouns and honorifics within each scene (e.g., "aku/kamu" for casual speech, inner thoughts, and peers; "saya/Anda" or "Tuan/Pak" for formal and respectful dialogue).
+                4. Keep established comic/manhwa terminology natural and consistent (e.g., Hunter, Gate, Dungeon, Raid, Guild, Rank, Mana, Boss, Awakening, Status Window).
+                5. Ensure every output sentence uses natural, grammatically correct $targetLangName vocabulary (never invent non-existent verb-noun combinations).
+                6. Replace any watermarks, translator credits, or website URLs (e.g. scanlation credits or domain names like "*.com") with "RTMTH".
+                7. Return ONLY a valid JSON array of strings matching the exact number and order of input blocks: ["translation 1", "translation 2", ...].
+                8. Do NOT include markdown formatting, code fences (```), or explanations. Never include raw unescaped newlines inside the JSON strings.
             """.trimIndent()
         }
 

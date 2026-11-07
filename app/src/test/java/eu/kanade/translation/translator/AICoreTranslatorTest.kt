@@ -198,6 +198,21 @@ class AICoreTranslatorTest {
     }
 
     @Test
+    fun `normalizeOcrText fixes comic OCR typos before prompting`() {
+        val messy = "SD WH PEAL WITH VY GUILD?"
+        val normalized = AICoreTranslator.normalizeOcrText(messy)
+        assertEquals("SO WHY DEAL WITH MY GUILD?", normalized)
+    }
+
+    @Test
+    fun `buildSystemInstruction includes idiom and pronoun rules`() {
+        val instruction = AICoreTranslator.buildSystemInstruction("Indonesian")
+        assertTrue(instruction.contains("Translate idioms and expressions by their true conversational meaning"))
+        assertTrue(instruction.contains("Maintain consistent character pronouns and honorifics"))
+        assertTrue(instruction.contains("Indonesian"))
+    }
+
+    @Test
     fun `smartMergeBlocks merges centered speech bubble lines`() {
         // Top line
         val top = TranslationBlock(
