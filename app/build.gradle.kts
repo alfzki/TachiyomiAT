@@ -37,8 +37,8 @@ android {
     defaultConfig {
         applicationId = "app.kanade.tachiyomi.at"
 
-        versionCode = 39
-        versionName = "0.21.3"
+        versionCode = 40
+        versionName = "0.21.3-at-3"
 
         buildConfigField("boolean", "TELEMETRY_INCLUDED", "${Config.includeTelemetry}")
         buildConfigField("boolean", "UPDATER_ENABLED", "${Config.enableUpdater}")
