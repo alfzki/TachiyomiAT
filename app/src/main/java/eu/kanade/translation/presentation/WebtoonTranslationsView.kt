@@ -1,7 +1,9 @@
 package eu.kanade.translation.presentation
 
 import android.content.Context
+import android.graphics.RectF
 import android.util.AttributeSet
+import android.view.MotionEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,10 +28,10 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.core.view.isVisible
 import eu.kanade.translation.data.TranslationFont
+import eu.kanade.translation.model.BubbleShape
 import eu.kanade.translation.model.PageTranslation
 
-class WebtoonTranslationsView :
-    AbstractComposeView {
+class WebtoonTranslationsView : AbstractComposeView {
 
     private val translation: PageTranslation
     private val font: TranslationFont
@@ -63,9 +65,62 @@ class WebtoonTranslationsView :
         ).toFontFamily()
     }
 
+    // Callback for when a translation block is deleted
+    var onBlockDelete: ((Int) -> Unit)? = null
+
+    // Track bubble bounds for touch hit-testing
+    private val bubbleBounds = mutableListOf<Pair<Int, RectF>>()
+    private var currentScaleFactor: Float = 1f
+
+    // Override touch events to intercept clicks on translation bubbles
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        // Only handle ACTION_UP (tap completion) to match clickable behavior
+        // Validate: view must be visible, have deletion callback, and have calculated bounds
+        if (event.actionMasked == MotionEvent.ACTION_UP &&
+            onBlockDelete != null &&
+            isVisible &&
+            bubbleBounds.isNotEmpty()
+        ) {
+            val x = event.x
+            val y = event.y
+
+            // Check if touch is within any bubble bounds
+            for ((index, bounds) in bubbleBounds) {
+                if (bounds.contains(x, y)) {
+                    // Manually trigger the compose click callback
+                    post {
+                        // Trigger menu display by invoking the stored callback
+                        performBubbleClick(index)
+                    }
+                    return true // Consume event to prevent RecyclerView navigation
+                }
+            }
+        }
+
+        // Not on a bubble, let parent handle navigation
+        return super.onTouchEvent(event)
+    }
+
+    // Callback reference to trigger menu display
+    private var bubbleClickCallback: ((Int) -> Unit)? = null
+
+    init {
+        // Pre-initialize callback to prevent race condition during view creation
+        bubbleClickCallback = {} // No-op initially
+    }
+
+    private fun performBubbleClick(index: Int) {
+        bubbleClickCallback?.invoke(index)
+    }
+
     @Composable
     override fun Content() {
         var size by remember { mutableStateOf(IntSize.Zero) }
+
+        // State for popup menu
+        var showMenu by remember { mutableStateOf(false) }
+        var selectedBlockIndex by remember { mutableStateOf<Int?>(null) }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -80,39 +135,140 @@ class WebtoonTranslationsView :
         ) {
             if (size == IntSize.Zero) return
             val scaleFactor = size.width / translation.imgWidth
+            currentScaleFactor = scaleFactor
+
+            // Calculate bubble bounds for hit-testing
+            calculateBubbleBounds(scaleFactor)
+
+            // Store click callback for touch event interception
+            bubbleClickCallback = { index ->
+                selectedBlockIndex = index
+                showMenu = true
+            }
+
             TextBlockBackground(scaleFactor)
-            TextBlockContent(scaleFactor)
+            TextBlockContent(scaleFactor) { index ->
+                selectedBlockIndex = index
+                showMenu = true
+            }
+
+            // Show popup menu when bubble is clicked
+            if (showMenu && selectedBlockIndex != null) {
+                TranslationBubbleMenu(
+                    expanded = showMenu,
+                    onDismiss = {
+                        showMenu = false
+                        selectedBlockIndex = null
+                    },
+                    onDelete = {
+                        val index = selectedBlockIndex
+                        showMenu = false
+                        selectedBlockIndex = null
+                        if (index != null) {
+                            onBlockDelete?.invoke(index)
+                        }
+                    },
+                )
+            }
         }
     }
 
     @Composable
     fun TextBlockBackground(scaleFactor: Float) {
-        translation.blocks.forEach { block ->
-            val padX = block.symWidth / 2
-            val padY = block.symHeight / 2
+        // Language-specific padding multipliers to prevent text overlap
+        val paddingMultiplier = when (translation.sourceLanguage) {
+            "ko", "korean" -> 1.15f // FIXED: Match touch detection (was 1.5f)
+            "ja", "japanese" -> 1.2f // Japanese with Kanji also benefits from extra padding
+            else -> 1.0f
+        }
+
+        translation.activeBlocks.forEach { block ->
+            val padX = (block.symWidth * 2) * paddingMultiplier // FIXED: Match SmartTranslationBlock (was / 2)
+            val padY = block.symHeight * paddingMultiplier // FIXED: Match SmartTranslationBlock (was / 2)
             val bgX = (block.x - padX / 2) * scaleFactor
             val bgY = (block.y - padY / 2) * scaleFactor
             val bgWidth = (block.width + padX) * scaleFactor
             val bgHeight = (block.height + padY) * scaleFactor
             val isVertical = block.angle > 85
+
+            // Detect bubble shape for adaptive background rendering
+            // Horizontal ovals (Korean common): Use high corner radius (50%) for elliptical appearance
+            // Vertical ovals: Use high corner radius for elliptical appearance
+            // Rectangles/Squares: Use moderate corner radius
+            val backgroundShape = when (block.detectShape()) {
+                BubbleShape.HORIZONTAL_OVAL -> RoundedCornerShape(percent = 50) // Elliptical (Korean case)
+                BubbleShape.VERTICAL_OVAL -> RoundedCornerShape(percent = 50) // Elliptical
+                BubbleShape.SQUARE -> RoundedCornerShape(8.dp) // More rounded square
+                else -> RoundedCornerShape(6.dp) // Slightly rounded rectangles
+            }
+
             Box(
                 modifier = Modifier
                     .offset(bgX.pxToDp(), bgY.pxToDp())
                     .size(bgWidth.pxToDp(), bgHeight.pxToDp())
                     .rotate(if (isVertical) 0f else block.angle)
-                    .background(Color.White, shape = RoundedCornerShape(4.dp)),
+                    .background(Color.White, shape = backgroundShape),
             )
         }
     }
 
     @Composable
-    fun TextBlockContent(scaleFactor: Float) {
-        translation.blocks.forEach { block ->
+    fun TextBlockContent(scaleFactor: Float, onBlockClick: (Int) -> Unit = {}) {
+        translation.activeBlocks.forEachIndexed { index, block ->
             SmartTranslationBlock(
                 block = block,
                 scaleFactor = scaleFactor,
                 fontFamily = fontFamily,
+                sourceLanguage = translation.sourceLanguage,
+                targetLanguage = translation.targetLanguage,
+                translatorType = translation.translatorType,
+                onBlockClick = if (onBlockDelete != null) {
+                    { onBlockClick(index) }
+                } else {
+                    null
+                },
             )
+        }
+    }
+
+    /**
+     * Calculate screen bounds for all translation bubbles to enable touch hit-testing.
+     * MUST match SmartTranslationBlock positioning EXACTLY to ensure accurate hit detection.
+     * This includes language-specific padding, offsets, and dimension expansion.
+     */
+    private fun calculateBubbleBounds(scaleFactor: Float) {
+        bubbleBounds.clear()
+
+        translation.activeBlocks.forEachIndexed { index, block ->
+            // Language-specific padding multipliers (matches TextBlockBackground rendering)
+            val paddingMultiplier = when (translation.sourceLanguage) {
+                "ko", "korean" -> 1.15f
+                "ja", "japanese" -> 1.2f
+                else -> 1.0f
+            }
+
+            // Calculate padding (FIXED: must match TextBlockBackground rendering exactly)
+            val padX = (block.symWidth * 2) * paddingMultiplier // FIXED: Match SmartTranslationBlock (was / 2)
+            val padY = block.symHeight * paddingMultiplier // FIXED: Match SmartTranslationBlock (was / 2)
+
+            // Calculate position with padding offset (matches TextBlockBackground rendering)
+            // Using max(..., 0.0f) to prevent negative coordinates
+            val xPx = kotlin.math.max((block.x - padX / 2) * scaleFactor, 0.0f)
+            val yPx = kotlin.math.max((block.y - padY / 2) * scaleFactor, 0.0f)
+
+            // Calculate dimensions with padding (matches TextBlockBackground rendering)
+            val widthPx = (block.width + padX) * scaleFactor
+            val heightPx = (block.height + padY) * scaleFactor
+
+            // Create bounding rectangle
+            val bounds = RectF(
+                xPx,
+                yPx,
+                xPx + widthPx,
+                yPx + heightPx,
+            )
+
+            bubbleBounds.add(Pair(index, bounds))
         }
     }
 
