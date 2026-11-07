@@ -183,8 +183,8 @@ class PagerTranslationsView : AbstractComposeView {
         }
 
         translation.activeBlocks.forEach { block ->
-            val padX = minOf((block.symWidth * 1.5f) * paddingMultiplier, 32f)
-            val padY = minOf(block.symHeight * 0.8f * paddingMultiplier, 24f)
+            val padX = (block.symWidth * 2.2f) * paddingMultiplier
+            val padY = (block.symHeight * 1.1f) * paddingMultiplier
             val bgX = ((block.x - padX / 2) * 1) * zoomScale
             val bgY = ((block.y - padY / 2) * 1) * zoomScale
             val bgWidth = (block.width + padX) * zoomScale
@@ -197,7 +197,7 @@ class PagerTranslationsView : AbstractComposeView {
             // Rectangles/Squares: Use moderate corner radius
             val backgroundShape = when (block.detectShape()) {
                 BubbleShape.HORIZONTAL_OVAL, BubbleShape.VERTICAL_OVAL, BubbleShape.SQUARE -> RoundedCornerShape(
-                    percent = 50,
+                    percent = 28,
                 )
                 else -> RoundedCornerShape(12.dp)
             }
@@ -249,8 +249,8 @@ class PagerTranslationsView : AbstractComposeView {
             }
 
             // Calculate padding (must match TextBlockBackground rendering exactly)
-            val padX = minOf((block.symWidth * 1.5f) * paddingMultiplier, 32f)
-            val padY = minOf(block.symHeight * 0.8f * paddingMultiplier, 24f)
+            val padX = (block.symWidth * 2.2f) * paddingMultiplier
+            val padY = (block.symHeight * 1.1f) * paddingMultiplier
 
             // Calculate bubble dimensions with padding offset (matches TextBlockBackground)
             // Note: viewTL offset is applied to account for pan/zoom

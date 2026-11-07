@@ -183,8 +183,8 @@ class WebtoonTranslationsView : AbstractComposeView {
         }
 
         translation.activeBlocks.forEach { block ->
-            val padX = minOf((block.symWidth * 1.5f) * paddingMultiplier, 32f)
-            val padY = minOf(block.symHeight * 0.8f * paddingMultiplier, 24f)
+            val padX = (block.symWidth * 2.2f) * paddingMultiplier
+            val padY = (block.symHeight * 1.1f) * paddingMultiplier
             val bgX = (block.x - padX / 2) * scaleFactor
             val bgY = (block.y - padY / 2) * scaleFactor
             val bgWidth = (block.width + padX) * scaleFactor
@@ -197,7 +197,7 @@ class WebtoonTranslationsView : AbstractComposeView {
             // Rectangles/Squares: Use moderate corner radius
             val backgroundShape = when (block.detectShape()) {
                 BubbleShape.HORIZONTAL_OVAL, BubbleShape.VERTICAL_OVAL, BubbleShape.SQUARE -> RoundedCornerShape(
-                    percent = 50,
+                    percent = 28,
                 )
                 else -> RoundedCornerShape(12.dp)
             }
@@ -248,8 +248,8 @@ class WebtoonTranslationsView : AbstractComposeView {
             }
 
             // Calculate padding (matches TextBlockBackground rendering exactly)
-            val padX = minOf((block.symWidth * 1.5f) * paddingMultiplier, 32f)
-            val padY = minOf(block.symHeight * 0.8f * paddingMultiplier, 24f)
+            val padX = (block.symWidth * 2.2f) * paddingMultiplier
+            val padY = (block.symHeight * 1.1f) * paddingMultiplier
 
             // Calculate position with padding offset (matches TextBlockBackground rendering)
             // Using max(..., 0.0f) to prevent negative coordinates

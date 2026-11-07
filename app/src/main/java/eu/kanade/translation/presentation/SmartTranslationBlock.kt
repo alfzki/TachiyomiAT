@@ -74,12 +74,12 @@ private const val CJK_VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN = 0.95f
 // ============================================================================
 // Latin Constants (new values for Spanish/Indonesian)
 // ============================================================================
-private const val LATIN_LINE_HEIGHT_MULTIPLIER = 1.2f // Tighter line height
+private const val LATIN_LINE_HEIGHT_MULTIPLIER = 1.12f
 
 // Latin Padding constants (more generous)
-private const val LATIN_HORIZONTAL_PADDING_DP = 6
-private const val LATIN_VERTICAL_PADDING_DP = 4
-private const val LATIN_OVAL_VERTICAL_PADDING_DP = 6
+private const val LATIN_HORIZONTAL_PADDING_DP = 4
+private const val LATIN_VERTICAL_PADDING_DP = 2
+private const val LATIN_OVAL_VERTICAL_PADDING_DP = 3
 private const val LATIN_OVAL_HORIZONTAL_PADDING_DP = 4
 
 // Latin Safety margins (more generous to prevent clipping)
@@ -92,7 +92,7 @@ private const val LATIN_VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN = 0.90f
 
 // Latin Expansion (hybrid overflow)
 private const val LATIN_MAX_EXPANSION = 1.35f
-private const val LATIN_MIN_FONT_SIZE = 8 // Can reduce to 8sp to prevent mid-word breaking
+private const val LATIN_MIN_FONT_SIZE = 6
 private const val LATIN_MAX_FONT_SIZE = 13
 
 // ============================================================================
@@ -162,14 +162,12 @@ fun SmartTranslationBlock(
     val latinVerticalPadding = if (isCJKModule) LATIN_VERTICAL_PADDING_DP else latinVPadding
 
     // Apply padding multiplier to calculate symbol padding
-    val padX = (block.symWidth * 2) * paddingMultiplier
-    val padY = block.symHeight * paddingMultiplier
-    val xPx = max((block.x - padX / 2) * scaleFactor, 0.0f)
-    val yPx = max((block.y - padY / 2) * scaleFactor, 0.0f)
-
-    // Calculate raw bubble dimensions (100% size for background)
-    val rawWidth = ((block.width + padX) * scaleFactor).pxToDp()
-    val rawHeight = ((block.height + padY) * scaleFactor).pxToDp()
+    val padX = (block.symWidth * 2.0f) * paddingMultiplier
+    val padY = (block.symHeight * 1.0f) * paddingMultiplier
+    val baseWidthPx = (block.width + padX) * scaleFactor
+    val baseHeightPx = (block.height + padY) * scaleFactor
+    val rawWidth = baseWidthPx.pxToDp()
+    val rawHeight = baseHeightPx.pxToDp()
     val isVertical = block.angle > 85
 
     // Detect language-specific translation pairs
@@ -215,6 +213,14 @@ fun SmartTranslationBlock(
         }
     }
 
+    val density = LocalDensity.current
+    val calcWidthPx = with(density) { calculatedDimensions.width.toPx() }
+    val calcHeightPx = with(density) { calculatedDimensions.height.toPx() }
+    val centerX = (block.x + block.width / 2f) * scaleFactor
+    val centerY = (block.y + block.height / 2f) * scaleFactor
+    val xPx = max(centerX - calcWidthPx / 2f, 0.0f)
+    val yPx = max(centerY - calcHeightPx / 2f, 0.0f)
+
     Box(
         modifier = modifier
             .then(
@@ -232,8 +238,6 @@ fun SmartTranslationBlock(
             .offset(xPx.pxToDp(), yPx.pxToDp())
             .requiredSize(calculatedDimensions.width, calculatedDimensions.height),
     ) {
-        val density = LocalDensity.current
-
         SubcomposeLayout { constraints ->
             val bubbleShape = block.detectShape()
 
@@ -314,21 +318,20 @@ fun SmartTranslationBlock(
                 if (isCJKModule) MIN_FONT_SIZE.toInt() else LATIN_MIN_FONT_SIZE,
             ).sp
 
-            // Calculate max lines based on module with pixel-accurate line height
             val lineHeightMultiplier = if (isCJKModule) KOREAN_LINE_HEIGHT_MULTIPLIER else LATIN_LINE_HEIGHT_MULTIPLIER
-            val maxLines = calculateMaxLines(finalMaxHeightPx, fontSize, lineHeightMultiplier, density)
 
             // Render text cleanly centered inside bubble without duplicate background
             val textPlaceable = subcompose(Unit) {
                 Text(
                     text = block.translation,
                     fontSize = finalFontSize,
+                    lineHeight = (finalFontSize.value * lineHeightMultiplier).sp,
                     fontFamily = fontFamily,
                     color = Color.Black,
                     softWrap = true,
                     overflow = TextOverflow.Clip,
                     textAlign = TextAlign.Center,
-                    maxLines = maxLines,
+                    maxLines = Int.MAX_VALUE,
                     modifier = Modifier
                         .widthIn(max = constrainedWidthDp)
                         .rotate(if (isVertical) 0f else block.angle),
@@ -505,11 +508,12 @@ private fun findOptimalFontSizeCJK(
             Text(
                 text = block.translation,
                 fontSize = mid.sp,
+                lineHeight = (mid * KOREAN_LINE_HEIGHT_MULTIPLIER).sp,
                 fontFamily = fontFamily,
                 color = Color.Black,
                 overflow = TextOverflow.Clip,
                 textAlign = TextAlign.Center,
-                maxLines = calculateMaxLines(finalMaxHeightPx, mid, KOREAN_LINE_HEIGHT_MULTIPLIER, density),
+                maxLines = Int.MAX_VALUE,
                 softWrap = true,
                 modifier = Modifier
                     .width(constrainedWidthDp)
@@ -599,7 +603,7 @@ private fun calculateLatinOptimalDimensions(
 
 /**
  * Find optimal font size for Latin using binary search.
- * Adapts between 8sp and 13sp, ensuring words fit without breaking mid-word.
+ * Adapts between 6sp and 13sp, ensuring words fit without breaking mid-word.
  */
 private fun findOptimalFontSizeLatin(
     block: TranslationBlock,
@@ -633,11 +637,12 @@ private fun findOptimalFontSizeLatin(
             Text(
                 text = block.translation,
                 fontSize = mid.sp,
+                lineHeight = (mid * LATIN_LINE_HEIGHT_MULTIPLIER).sp,
                 fontFamily = fontFamily,
                 color = Color.Black,
                 overflow = TextOverflow.Clip,
                 textAlign = TextAlign.Center,
-                maxLines = calculateMaxLines(finalMaxHeightPx, mid, LATIN_LINE_HEIGHT_MULTIPLIER, density),
+                maxLines = Int.MAX_VALUE,
                 softWrap = true,
                 modifier = Modifier
                     .width(constrainedWidthDp)
@@ -663,6 +668,7 @@ private fun findOptimalFontSizeLatin(
 /**
  * Calculate maximum lines based on bubble height and font size.
  */
+@Suppress("unused")
 private fun calculateMaxLines(heightPx: Int, fontSize: Int, lineHeightMultiplier: Float, density: Density): Int {
     val approximateLineHeightPx = with(density) { (fontSize.sp * lineHeightMultiplier).toPx() }
     val maxLines = (heightPx / approximateLineHeightPx).toInt().coerceAtLeast(1)
