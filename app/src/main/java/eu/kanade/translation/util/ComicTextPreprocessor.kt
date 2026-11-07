@@ -198,12 +198,15 @@ object ComicTextPreprocessor {
         result = replacePreservingCase(result, "\\bTO\\s+TRAN\\b", "TO TRAIN")
         result = replacePreservingCase(result, "\\bNAMB\\b", "NAME")
         result = replacePreservingCase(result, "\\bEVIGT\\b", "EVICT")
-        result =
-            replacePreservingCase(
-                result,
-                "(?U)\\b(?<=EVICT\\s|EVIGT\\s|TO\\s|LET\\s|GIVE\\s|TELL\\s|WITH\\s|FOR\\s|HELP\\s|BEAT\\s|SAVING\\s)MB\\b",
-                "ME",
-            )
+        result = Regex(
+            "\\b(EVICT|EVIGT|TO|LET|GIVE|TELL|WITH|FOR|HELP|BEAT|SAVING)(\\s+)(MB)\\b",
+            RegexOption.IGNORE_CASE,
+        ).replace(result) { m ->
+            val prefix = m.groupValues[1] + m.groupValues[2]
+            val mb = m.groupValues[3]
+            val me = if (mb.all { it.isLowerCase() }) "me" else "ME"
+            prefix + me
+        }
         result = replacePreservingCase(result, "\\bBEFOR[ÉÈÊéèê](?=[^a-zA-Z0-9]|$)", "BEFORE")
         result = replacePreservingCase(result, "\\bOBMOUSLY\\b", "OBVIOUSLY")
         result = replacePreservingCase(result, "\\bCAPPEN\\b", "HAPPEN")
@@ -213,12 +216,19 @@ object ComicTextPreprocessor {
         result = replacePreservingCase(result, "\\bUPA\\s+(?=BIT\\b|LITTLE\\b|LOT\\b)", "UP A ")
         result = replacePreservingCase(result, "\\bBEDEMOTED\\b", "BE DEMOTED")
         result = replacePreservingCase(result, "\\bTOTRIAL\\b", "TO TRIAL")
-        result =
-            replacePreservingCase(
-                result,
-                "(?U)\\b(?<=OF\\s|IN\\s|FOR\\s|WITH\\s|FROM\\s)TS\\s+(?=DISCIPLES\\b|MEMBERS\\b|RULES\\b|POWER\\b|SECT\\b)",
-                "ITS ",
-            )
+        result = Regex(
+            "\\b(OF|IN|FOR|WITH|FROM)(\\s+)(TS)(?=\\s+(?:DISCIPLES|MEMBERS|RULES|POWER|SECT)\\b)",
+            RegexOption.IGNORE_CASE,
+        ).replace(result) { m ->
+            val prefix = m.groupValues[1] + m.groupValues[2]
+            val ts = m.groupValues[3]
+            val its = when {
+                ts.all { it.isLowerCase() } -> "its"
+                ts.first().isUpperCase() && ts.drop(1).all { it.isLowerCase() } -> "Its"
+                else -> "ITS"
+            }
+            prefix + its
+        }
         result = result.replace(Regex("([A-Za-z]{2,})ooo\\b"), "$1...")
         result = replacePreservingCase(result, "\\bYANG\\s+KA\\b", "YANG KAI")
         result = replacePreservingCase(result, "\\bMORNINGI\\b", "MORNING")
