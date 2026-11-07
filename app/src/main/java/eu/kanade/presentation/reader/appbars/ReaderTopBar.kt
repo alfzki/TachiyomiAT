@@ -1,5 +1,6 @@
 package eu.kanade.presentation.reader.appbars
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -7,8 +8,10 @@ import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.Bookmark
+import mihon.icons.materialsymbols.rounded.Translate
 import mihon.icons.materialsymbols.roundedfilled.Bookmark
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.at.ATMR
 import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
@@ -18,6 +21,8 @@ fun ReaderTopBar(
     navigateUp: () -> Unit,
     bookmarked: Boolean,
     onToggleBookmarked: () -> Unit,
+    showTranslations: Boolean,
+    onToggleShowTranslations: () -> Unit,
     onOpenInWebView: (() -> Unit)?,
     onOpenInBrowser: (() -> Unit)?,
     onShare: (() -> Unit)?,
@@ -32,6 +37,24 @@ fun ReaderTopBar(
         actions = {
             AppBarActions(
                 actions = buildList {
+                    add(
+                        AppBar.Action(
+                            title = stringResource(
+                                if (showTranslations) {
+                                    ATMR.strings.action_hide_translations
+                                } else {
+                                    ATMR.strings.action_show_translations
+                                },
+                            ),
+                            icon = MaterialSymbols.Rounded.Translate,
+                            iconTint = if (showTranslations) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            },
+                            onClick = onToggleShowTranslations,
+                        ),
+                    )
                     add(
                         AppBar.Action(
                             title = stringResource(
