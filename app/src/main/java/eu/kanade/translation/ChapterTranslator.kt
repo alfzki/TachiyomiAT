@@ -78,18 +78,13 @@ class ChapterTranslator(
     @Volatile
     var isPaused: Boolean = false
 
-    private var textRecognizer: TextRecognizer
-    private var textTranslator: TextTranslator
-    private var currentEngine: TextTranslators
+    private var textRecognizer: TextRecognizer? = null
+    private var textTranslator: TextTranslator? = null
+    private var currentEngine: TextTranslators? = null
     private val languageDetector = ComicLanguageDetector
 
     init {
-        val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
-        val toLang = TextTranslatorLanguage.fromPref(translationPreferences.translateToLanguage())
-        val initialFromLang = if (fromLang == TextRecognizerLanguage.AUTO) TextRecognizerLanguage.ENGLISH else fromLang
-        textRecognizer = TextRecognizer(fromLang)
-        currentEngine = TextTranslators.fromPref(translationPreferences.translationEngine())
-        textTranslator = currentEngine.build(translationPreferences, initialFromLang, toLang)
+        // Recognizer and translator are initialized on-demand when translation jobs execute.
     }
 
     fun start(): Boolean {
@@ -122,6 +117,14 @@ class ChapterTranslator(
     fun clearQueue() {
         cancelTranslatorJob()
         internalClearQueue()
+    }
+
+    fun destroy() {
+        cancelTranslatorJob()
+        textRecognizer?.close()
+        textRecognizer = null
+        textTranslator?.close()
+        textTranslator = null
     }
 
     private fun launchTranslatorJob() {
@@ -263,9 +266,9 @@ class ChapterTranslator(
             }
 
             // Check if recognizer reinitialization is needed
-            if (effectiveFromLang != textRecognizer.language) {
-                textRecognizer.close()
-                textRecognizer = TextRecognizer(effectiveFromLang)
+            val recognizer = textRecognizer.takeIf { it?.language == effectiveFromLang } ?: run {
+                textRecognizer?.close()
+                TextRecognizer(effectiveFromLang).also { textRecognizer = it }
             }
             // Check if translator reinitialization is needed
             val selectedEngine = TextTranslators.fromPref(translationPreferences.translationEngine())
@@ -275,20 +278,22 @@ class ChapterTranslator(
                     AICoreModelVariant.fromPref(translationPreferences.aicoreModelVariant().get()) ||
                     currentAICoreTranslator.useImageContext != translationPreferences.aicoreUsePageImageContext().get()
                 )
-            if (effectiveFromLang != textTranslator.fromLang ||
-                translation.toLang != textTranslator.toLang ||
-                selectedEngine != currentEngine ||
-                aicoreParamsChanged
-            ) {
+            val translator = textTranslator.takeIf {
+                it != null &&
+                    it.fromLang == effectiveFromLang &&
+                    it.toLang == translation.toLang &&
+                    currentEngine == selectedEngine &&
+                    !aicoreParamsChanged
+            } ?: run {
                 withContext(Dispatchers.IO) {
-                    textTranslator.close()
+                    textTranslator?.close()
                 }
                 currentEngine = selectedEngine
-                textTranslator = selectedEngine.build(
+                selectedEngine.build(
                     translationPreferences,
                     effectiveFromLang,
                     translation.toLang,
-                )
+                ).also { textTranslator = it }
             }
             // Directory where translations for a manga is stored
             val translationMangaDir = provider.getMangaDir(translation.manga.title, translation.source)
@@ -317,7 +322,7 @@ class ChapterTranslator(
                                     tmpFile.outputStream().use { outStream -> inStream.copyTo(outStream) }
                                 }
                                 val image = InputImage.fromFilePath(context, android.net.Uri.fromFile(tmpFile))
-                                val result = textRecognizer.recognize(image)
+                                val result = recognizer.recognize(image)
                                 val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
                                 val pageTranslation =
                                     convertToPageTranslation(
@@ -342,7 +347,7 @@ class ChapterTranslator(
                                     }
                                 },
                             )
-                            textTranslator.translate(pages, translationContext)
+                            translator.translate(pages, translationContext)
                         }
                     } else {
                         val files = chapterPath.listFiles().orEmpty()
@@ -356,7 +361,7 @@ class ChapterTranslator(
                                 tmpFile.outputStream().use { outStream -> inStream.copyTo(outStream) }
                             }
                             val image = InputImage.fromFilePath(context, android.net.Uri.fromFile(tmpFile))
-                            val result = textRecognizer.recognize(image)
+                            val result = recognizer.recognize(image)
                             val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
                             val pageTranslation =
                                 convertToPageTranslation(
@@ -383,7 +388,7 @@ class ChapterTranslator(
                                 }
                             },
                         )
-                        textTranslator.translate(pages, translationContext)
+                        translator.translate(pages, translationContext)
                     }
                 }
             } finally {

@@ -91,3 +91,27 @@
     public <init>();
     public void destroy();
 }
+
+# ML Kit and Firebase Components (discovered via AndroidManifest metadata reflection)
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    public <init>();
+}
+-keep class com.google.mlkit.** { *; }
+-dontwarn com.google.mlkit.**
+-keep class com.google.android.gms.internal.mlkit_** { *; }
+-dontwarn com.google.android.gms.internal.mlkit_**
+
+# Google Generative AI (Gemini)
+-keep class com.google.ai.client.generativeai.** { *; }
+-dontwarn com.google.ai.client.generativeai.**
+
+# Google Cloud Translate & gRPC
+-keep class com.google.cloud.translate.** { *; }
+-dontwarn com.google.cloud.translate.**
+-dontwarn io.grpc.**
+-dontwarn com.google.api.**
+-dontwarn com.google.auth.**
+-dontwarn com.google.protobuf.**
+-dontwarn reactor.blockhound.**
+-dontwarn com.google.appengine.api.**
+-keep class io.grpc.** { *; }
