@@ -48,11 +48,8 @@ import mihon.app.di.appGraph
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.Public
 import mihon.icons.simpleicons.Discord
-import mihon.icons.simpleicons.Facebook
 import mihon.icons.simpleicons.Github
-import mihon.icons.simpleicons.Reddit
 import mihon.icons.simpleicons.SimpleIcons
-import mihon.icons.simpleicons.X
 import tachiyomi.core.common.Constants
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.release.interactor.GetApplicationRelease
@@ -182,7 +179,7 @@ object AboutScreen : Screen() {
                         LinkIcon(
                             label = stringResource(MR.strings.website),
                             icon = MaterialSymbols.Rounded.Public,
-                            url = "https://github.com/mannu691",
+                            url = "https://github.com/alfzki/TachiyomiAT",
                         )
                         LinkIcon(
                             label = "Discord",
@@ -190,14 +187,9 @@ object AboutScreen : Screen() {
                             url = "https://discord.com/invite/rkvXfVPRdq",
                         )
                         LinkIcon(
-                            label = "Reddit",
-                            icon = SimpleIcons.Reddit,
-                            url = "https://www.reddit.com/user/Mannu_Gaming/",
-                        )
-                        LinkIcon(
                             label = "GitHub",
                             icon = SimpleIcons.Github,
-                            url = "https://github.com/mannu691",
+                            url = "https://github.com/alfzki/TachiyomiAT",
                         )
                     }
                 }
