@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.translation.data.TranslationProvider
+import eu.kanade.translation.detector.ComicLanguageDetector
 import eu.kanade.translation.model.PageTranslation
 import eu.kanade.translation.model.Translation
 import eu.kanade.translation.model.TranslationBlock
@@ -80,13 +81,15 @@ class ChapterTranslator(
     private var textRecognizer: TextRecognizer
     private var textTranslator: TextTranslator
     private var currentEngine: TextTranslators
+    private val languageDetector = ComicLanguageDetector
 
     init {
         val fromLang = TextRecognizerLanguage.fromPref(translationPreferences.translateFromLanguage())
         val toLang = TextTranslatorLanguage.fromPref(translationPreferences.translateToLanguage())
+        val initialFromLang = if (fromLang == TextRecognizerLanguage.AUTO) TextRecognizerLanguage.ENGLISH else fromLang
         textRecognizer = TextRecognizer(fromLang)
         currentEngine = TextTranslators.fromPref(translationPreferences.translationEngine())
-        textTranslator = currentEngine.build(translationPreferences, fromLang, toLang)
+        textTranslator = currentEngine.build(translationPreferences, initialFromLang, toLang)
     }
 
     fun start(): Boolean {
@@ -232,40 +235,6 @@ class ChapterTranslator(
 
     private suspend fun translateChapter(translation: Translation) {
         try {
-            // Check if recognizer reinitialization is needed
-            if (translation.fromLang != textRecognizer.language) {
-                textRecognizer.close()
-                textRecognizer = TextRecognizer(translation.fromLang)
-            }
-            // Check if translator reinitialization is needed
-            val selectedEngine = TextTranslators.fromPref(translationPreferences.translationEngine())
-            val currentAICoreTranslator = textTranslator as? AICoreTranslator
-            val aicoreParamsChanged = currentAICoreTranslator != null && (
-                currentAICoreTranslator.modelVariant !=
-                    AICoreModelVariant.fromPref(translationPreferences.aicoreModelVariant().get()) ||
-                    currentAICoreTranslator.useImageContext != translationPreferences.aicoreUsePageImageContext().get()
-                )
-            if (translation.fromLang != textTranslator.fromLang ||
-                translation.toLang != textTranslator.toLang ||
-                selectedEngine != currentEngine ||
-                aicoreParamsChanged
-            ) {
-                withContext(Dispatchers.IO) {
-                    textTranslator.close()
-                }
-                currentEngine = selectedEngine
-                textTranslator = selectedEngine.build(
-                    translationPreferences,
-                    translation.fromLang,
-                    translation.toLang,
-                )
-            }
-            // Directory where translations for a manga is stored
-            val translationMangaDir = provider.getMangaDir(translation.manga.title, translation.source)
-
-            // translations save file
-            val saveFile = provider.getTranslationFileName(translation.chapter.name, translation.chapter.scanlator)
-
             // Directory where chapter images is stored
             val chapterPath = downloadProvider.findChapterDir(
                 chapterName = translation.chapter.name,
@@ -277,6 +246,55 @@ class ChapterTranslator(
                 translation.status = Translation.State.ERROR
                 return
             }
+
+            // Resolve effective source language (handling AUTO detection)
+            val effectiveFromLang = if (translation.fromLang == TextRecognizerLanguage.AUTO) {
+                val resolved = languageDetector.detectLanguage(
+                    source = translation.source,
+                    manga = translation.manga,
+                    sampleTextProvider = { sampleChapterText(chapterPath) },
+                )
+                logcat(LogPriority.INFO) {
+                    "Auto-detected comic language for ${translation.manga.title}: $resolved"
+                }
+                resolved
+            } else {
+                translation.fromLang
+            }
+
+            // Check if recognizer reinitialization is needed
+            if (effectiveFromLang != textRecognizer.language) {
+                textRecognizer.close()
+                textRecognizer = TextRecognizer(effectiveFromLang)
+            }
+            // Check if translator reinitialization is needed
+            val selectedEngine = TextTranslators.fromPref(translationPreferences.translationEngine())
+            val currentAICoreTranslator = textTranslator as? AICoreTranslator
+            val aicoreParamsChanged = currentAICoreTranslator != null && (
+                currentAICoreTranslator.modelVariant !=
+                    AICoreModelVariant.fromPref(translationPreferences.aicoreModelVariant().get()) ||
+                    currentAICoreTranslator.useImageContext != translationPreferences.aicoreUsePageImageContext().get()
+                )
+            if (effectiveFromLang != textTranslator.fromLang ||
+                translation.toLang != textTranslator.toLang ||
+                selectedEngine != currentEngine ||
+                aicoreParamsChanged
+            ) {
+                withContext(Dispatchers.IO) {
+                    textTranslator.close()
+                }
+                currentEngine = selectedEngine
+                textTranslator = selectedEngine.build(
+                    translationPreferences,
+                    effectiveFromLang,
+                    translation.toLang,
+                )
+            }
+            // Directory where translations for a manga is stored
+            val translationMangaDir = provider.getMangaDir(translation.manga.title, translation.source)
+
+            // translations save file
+            val saveFile = provider.getTranslationFileName(translation.chapter.name, translation.chapter.scanlator)
 
             val pages = mutableMapOf<String, PageTranslation>()
             val tmpFile = java.io.File.createTempFile("at_trans_", ".tmp", context.cacheDir)
@@ -302,7 +320,7 @@ class ChapterTranslator(
                                 val result = textRecognizer.recognize(image)
                                 val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
                                 val pageTranslation =
-                                    convertToPageTranslation(blocks, image.width, image.height, translation.fromLang)
+                                    convertToPageTranslation(blocks, image.width, image.height, effectiveFromLang)
                                 if (pageTranslation.blocks.isNotEmpty()) pages[entryName] = pageTranslation
                             }
 
@@ -334,7 +352,7 @@ class ChapterTranslator(
                             val result = textRecognizer.recognize(image)
                             val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
                             val pageTranslation =
-                                convertToPageTranslation(blocks, image.width, image.height, translation.fromLang)
+                                convertToPageTranslation(blocks, image.width, image.height, effectiveFromLang)
                             if (pageTranslation.blocks.isNotEmpty()) pages[file.name!!] = pageTranslation
                         }
 
@@ -370,6 +388,136 @@ class ChapterTranslator(
         } catch (error: Throwable) {
             translation.status = Translation.State.ERROR
             logcat(LogPriority.ERROR, error)
+        }
+    }
+
+    private suspend fun sampleChapterText(chapterPath: UniFile): String? = withContext(Dispatchers.IO) {
+        try {
+            val tmpFile = java.io.File.createTempFile("at_sample_", ".tmp", context.cacheDir)
+            try {
+                if (chapterPath.isFile) {
+                    chapterPath.archiveReader(context).use { reader ->
+                        val entries = reader.useEntries { entries ->
+                            entries.filter {
+                                it.isFile && ImageUtil.isImage(it.name) { reader.getInputStream(it.name)!! }
+                            }
+                                .sortedWith { f1, f2 -> f1.name.compareToCaseInsensitiveNaturalOrder(f2.name) }
+                                .map { it.name }
+                                .toList()
+                        }
+                        if (entries.isEmpty()) return@withContext null
+                        val candidateIndices = when {
+                            entries.size > 2 -> listOf(1, 2, 0)
+                            entries.size > 1 -> listOf(1, 0)
+                            else -> listOf(0)
+                        }
+                        var fallbackText: String? = null
+                        for (idx in candidateIndices) {
+                            val entryName = entries[idx]
+                            val copied = reader.getInputStream(entryName)?.use { inStream ->
+                                tmpFile.outputStream().use { outStream -> inStream.copyTo(outStream) }
+                                true
+                            } ?: false
+                            if (copied) {
+                                val image = InputImage.fromFilePath(context, android.net.Uri.fromFile(tmpFile))
+                                val probed = runProbeOcr(image)
+                                if (!probed.isNullOrBlank()) {
+                                    if (probed.length >= 10) {
+                                        return@withContext probed
+                                    }
+                                    if (fallbackText == null) {
+                                        fallbackText = probed
+                                    }
+                                }
+                            }
+                        }
+                        fallbackText
+                    }
+                } else {
+                    val files = chapterPath.listFiles().orEmpty()
+                        .filter { ImageUtil.isImage(it.name) }
+                        .sortedWith { f1, f2 ->
+                            f1.name.orEmpty().compareToCaseInsensitiveNaturalOrder(f2.name.orEmpty())
+                        }
+                    if (files.isEmpty()) return@withContext null
+                    val candidateIndices = when {
+                        files.size > 2 -> listOf(1, 2, 0)
+                        files.size > 1 -> listOf(1, 0)
+                        else -> listOf(0)
+                    }
+                    var fallbackText: String? = null
+                    for (idx in candidateIndices) {
+                        val file = files[idx]
+                        val copied = try {
+                            file.openInputStream().use { inStream ->
+                                tmpFile.outputStream().use { outStream -> inStream.copyTo(outStream) }
+                                true
+                            }
+                        } catch (_: Throwable) {
+                            false
+                        }
+                        if (copied) {
+                            val image = InputImage.fromFilePath(context, android.net.Uri.fromFile(tmpFile))
+                            val probed = runProbeOcr(image)
+                            if (!probed.isNullOrBlank()) {
+                                if (probed.length >= 10) {
+                                    return@withContext probed
+                                }
+                                if (fallbackText == null) {
+                                    fallbackText = probed
+                                }
+                            }
+                        }
+                    }
+                    fallbackText
+                }
+            } finally {
+                tmpFile.delete()
+            }
+        } catch (e: Throwable) {
+            logcat(LogPriority.WARN, e) { "Failed to extract sample text from chapter images" }
+            null
+        }
+    }
+
+    private fun runProbeOcr(image: InputImage): String? {
+        val japaneseResult = try {
+            TextRecognizer(TextRecognizerLanguage.JAPANESE).use { recognizer ->
+                recognizer.recognize(image).text
+            }
+        } catch (e: Throwable) {
+            logcat(LogPriority.WARN, e) { "Probe OCR with Japanese recognizer failed" }
+            null
+        }
+
+        val trimmedJapanese = japaneseResult?.trim().orEmpty()
+        val hasJapaneseOrChinese = trimmedJapanese.any {
+            ComicLanguageDetector.isKana(it) || ComicLanguageDetector.isCjkUnified(it)
+        }
+
+        if (hasJapaneseOrChinese && trimmedJapanese.length >= 5) {
+            return trimmedJapanese
+        }
+
+        val koreanResult = try {
+            TextRecognizer(TextRecognizerLanguage.KOREAN).use { recognizer ->
+                recognizer.recognize(image).text
+            }
+        } catch (e: Throwable) {
+            logcat(LogPriority.WARN, e) { "Probe OCR with Korean recognizer failed" }
+            null
+        }
+
+        val trimmedKorean = koreanResult?.trim().orEmpty()
+        val hasHangul = trimmedKorean.any { ComicLanguageDetector.isHangul(it) }
+
+        return when {
+            hasHangul -> trimmedKorean
+            hasJapaneseOrChinese -> trimmedJapanese
+            trimmedKorean.length > trimmedJapanese.length && trimmedKorean.isNotEmpty() -> trimmedKorean
+            trimmedJapanese.isNotEmpty() -> trimmedJapanese
+            trimmedKorean.isNotEmpty() -> trimmedKorean
+            else -> null
         }
     }
 
