@@ -183,8 +183,8 @@ class PagerTranslationsView : AbstractComposeView {
         }
 
         translation.activeBlocks.forEach { block ->
-            val padX = (block.symWidth * 2) * paddingMultiplier
-            val padY = block.symHeight * paddingMultiplier
+            val padX = minOf((block.symWidth * 1.5f) * paddingMultiplier, 32f)
+            val padY = minOf(block.symHeight * 0.8f * paddingMultiplier, 24f)
             val bgX = ((block.x - padX / 2) * 1) * zoomScale
             val bgY = ((block.y - padY / 2) * 1) * zoomScale
             val bgWidth = (block.width + padX) * zoomScale
@@ -196,10 +196,10 @@ class PagerTranslationsView : AbstractComposeView {
             // Vertical ovals: Use high corner radius for elliptical appearance
             // Rectangles/Squares: Use moderate corner radius
             val backgroundShape = when (block.detectShape()) {
-                BubbleShape.HORIZONTAL_OVAL -> RoundedCornerShape(percent = 50) // Elliptical (Korean case)
-                BubbleShape.VERTICAL_OVAL -> RoundedCornerShape(percent = 50) // Elliptical
-                BubbleShape.SQUARE -> RoundedCornerShape(8.dp) // More rounded square
-                else -> RoundedCornerShape(6.dp) // Slightly rounded rectangles
+                BubbleShape.HORIZONTAL_OVAL, BubbleShape.VERTICAL_OVAL, BubbleShape.SQUARE -> RoundedCornerShape(
+                    percent = 50,
+                )
+                else -> RoundedCornerShape(12.dp)
             }
 
             Box(
@@ -249,8 +249,8 @@ class PagerTranslationsView : AbstractComposeView {
             }
 
             // Calculate padding (must match TextBlockBackground rendering exactly)
-            val padX = (block.symWidth * 2) * paddingMultiplier
-            val padY = block.symHeight * paddingMultiplier
+            val padX = minOf((block.symWidth * 1.5f) * paddingMultiplier, 32f)
+            val padY = minOf(block.symHeight * 0.8f * paddingMultiplier, 24f)
 
             // Calculate bubble dimensions with padding offset (matches TextBlockBackground)
             // Note: viewTL offset is applied to account for pan/zoom

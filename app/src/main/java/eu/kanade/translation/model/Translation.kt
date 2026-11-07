@@ -25,6 +25,39 @@ data class Translation(
             _statusFlow.value = status
         }
 
+    @Transient
+    private val _progressFlow = MutableStateFlow(0)
+
+    @Transient
+    val progressFlow = _progressFlow.asStateFlow()
+    var progress: Int
+        get() = _progressFlow.value
+        set(value) {
+            _progressFlow.value = value
+        }
+
+    @Transient
+    private val _totalPagesFlow = MutableStateFlow(0)
+
+    @Transient
+    val totalPagesFlow = _totalPagesFlow.asStateFlow()
+    var totalPages: Int
+        get() = _totalPagesFlow.value
+        set(value) {
+            _totalPagesFlow.value = value
+        }
+
+    @Transient
+    private val _errorFlow = MutableStateFlow<String?>(null)
+
+    @Transient
+    val errorFlow = _errorFlow.asStateFlow()
+    var error: String?
+        get() = _errorFlow.value
+        set(value) {
+            _errorFlow.value = value
+        }
+
     enum class State(val value: Int) {
         NOT_TRANSLATED(0),
         QUEUE(1),

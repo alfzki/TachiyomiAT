@@ -91,6 +91,16 @@ class TranslationManager(
         translator.stop()
     }
 
+    fun reorderQueue(translations: List<Translation>) {
+        translator.reorderQueue(translations)
+    }
+
+    fun retryTranslation(translation: Translation) {
+        translation.error = null
+        translation.status = Translation.State.QUEUE
+        startTranslation()
+    }
+
     fun getQueuedTranslationOrNull(chapterId: Long): Translation? {
         return queueState.value.find { it.chapter.id == chapterId }
     }
@@ -279,6 +289,20 @@ class TranslationManager(
             translations
                 .map { translation ->
                     translation.statusFlow.drop(1).map { translation }
+                }
+                .merge()
+        }
+        .onStart {
+            emitAll(
+                queueState.value.filter { translation -> translation.status == Translation.State.TRANSLATING }.asFlow(),
+            )
+        }
+
+    fun progressFlow(): Flow<Translation> = queueState
+        .flatMapLatest { translations ->
+            translations
+                .map { translation ->
+                    translation.progressFlow.drop(1).map { translation }
                 }
                 .merge()
         }

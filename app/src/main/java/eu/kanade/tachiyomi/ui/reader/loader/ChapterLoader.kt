@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import mihon.app.di.appGraph
 import mihon.core.archive.archiveReader
 import mihon.core.archive.epubReader
 import tachiyomi.core.common.i18n.stringResource
@@ -99,11 +100,19 @@ class ChapterLoader(
                 downloadManager,
                 downloadProvider,
             )
-            source is LocalSource -> source.getFormat(chapter.chapter.toSChapter()).let { format ->
-                when (format) {
-                    is Format.Directory -> DirectoryPageLoader(format.file)
-                    is Format.Archive -> ArchivePageLoader(format.file.archiveReader(context))
-                    is Format.Epub -> EpubPageLoader(format.file.epubReader(context))
+            source is LocalSource -> {
+                val translations = context.appGraph.translationManager.getChapterTranslation(
+                    chapter.chapter.name,
+                    chapter.chapter.scanlator,
+                    manga.title,
+                    source,
+                )
+                source.getFormat(chapter.chapter.toSChapter()).let { format ->
+                    when (format) {
+                        is Format.Directory -> DirectoryPageLoader(format.file, translations)
+                        is Format.Archive -> ArchivePageLoader(format.file.archiveReader(context), translations)
+                        is Format.Epub -> EpubPageLoader(format.file.epubReader(context))
+                    }
                 }
             }
             source is HttpSource -> HttpPageLoader(chapter, source, chapterCache, appScope, canLoadAhead)

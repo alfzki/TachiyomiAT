@@ -117,6 +117,8 @@ class MangaScreen(
             onDownloadChapter = viewModel::runChapterDownloadActions.takeIf { !successState.source.isLocalOrStub() },
             onTranslationChapter = viewModel::runChapterTranslationActions,
             downloadProgressProvider = viewModel::getDownloadProgress,
+            translationProgressProvider = viewModel::getTranslationProgress,
+            translationErrorProvider = viewModel::getTranslationError,
             onAddToLibraryClicked = {
                 if (successState.manga.favorite) {
                     viewModel.showRemoveFromLibraryDialog()

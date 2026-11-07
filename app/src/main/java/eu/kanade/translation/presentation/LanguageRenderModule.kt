@@ -88,27 +88,27 @@ sealed class LanguageRenderModule {
     }
 
     /**
-     * Latin Module for Spanish, Indonesian, and other Latin-alphabet languages.
+     * Latin Module for Spanish, Indonesian, English, and other Latin-alphabet languages.
      *
      * Uses generous height margins (95%) to prevent text clipping.
-     * Implements hybrid overflow: expand bubble up to 1.3x first, then reduce font to 10dp if needed.
-     * Tighter line height (1.2x) to pack lines closer together.
+     * Implements hybrid overflow with adaptive font sizing (8sp - 13sp).
+     * Tighter line height (1.15x) to pack lines closer together.
      */
     data class LatinModule(
         override val paddingMultiplier: Float = 1.0f,
-        override val ovalHeightMargin: Float = 0.95f, // Much more generous than CJK
-        override val verticalOvalWidthMargin: Float = 0.75f,
+        override val ovalHeightMargin: Float = 0.95f, // Generous height margin
+        override val verticalOvalWidthMargin: Float = 0.85f, // Generous width margin for vertical bubbles
         override val rectHeightMargin: Float = 0.99f,
         override val rectWidthMargin: Float = 0.98f,
-        override val lineHeightMultiplier: Float = 1.2f, // Tighter line height
+        override val lineHeightMultiplier: Float = 1.15f, // Tighter line height for comic readability
         override val minExpansion: Float = 1.0f, // Start at base size
-        override val maxExpansion: Float = 1.3f, // Max 1.3x expansion
-        override val horizontalPaddingDp: Int = 6, // Slightly less horizontal padding
-        override val verticalPaddingDp: Int = 4, // More vertical padding for Latin chars
-        override val ovalVerticalPaddingDp: Int = 6, // Less aggressive oval padding
+        override val maxExpansion: Float = 1.4f, // Allow up to 1.4x expansion
+        override val horizontalPaddingDp: Int = 4, // Clean horizontal padding
+        override val verticalPaddingDp: Int = 3, // Clean vertical padding
+        override val ovalVerticalPaddingDp: Int = 4, // Clean oval padding
         override val ovalHorizontalPaddingDp: Int = 4,
-        override val maxFontSize: Int = 12, // Start with 12dp
-        override val minFontSize: Int = 10, // Can reduce to 10dp as fallback
+        override val maxFontSize: Int = 13, // Start with 13sp
+        override val minFontSize: Int = 8, // Allow down to 8sp to prevent mid-word breaking
         override val useHybridOverflow: Boolean = true,
     ) : LanguageRenderModule()
 
@@ -129,19 +129,49 @@ sealed class LanguageRenderModule {
             "in",
             "indonesian",
             "ind",
+            "en",
+            "english",
+            "eng",
+            "fr",
+            "french",
+            "de",
+            "german",
+            "it",
+            "italian",
+            "pt",
+            "portuguese",
         )
 
         /**
+         * Create the appropriate language module based on the target language and rendered text.
+         * The rendered text script (target language) dictates typography and constraints.
+         */
+        fun forTranslation(
+            targetLanguage: String,
+            sourceLanguage: String = "",
+            textSample: String = "",
+        ): LanguageRenderModule {
+            val target = targetLanguage.lowercase().trim()
+            val isTargetCJK = target in CJK_LANGUAGES
+            val hasCJKChars = textSample.any { char ->
+                val code = char.code
+                (code in 0x4E00..0x9FFF) || (code in 0xAC00..0xD7AF) || (code in 0x3040..0x30FF)
+            }
+            return when {
+                isTargetCJK || hasCJKChars -> CJKModule(if (isTargetCJK) target else sourceLanguage)
+                else -> LatinModule()
+            }
+        }
+
+        /**
          * Create the appropriate language module based on the source language.
-         *
-         * @param language The source language code from OCR/detection
-         * @return CJKModule for CJK languages, LatinModule for Spanish/Indonesian and others
+         * Kept for backward compatibility.
          */
         fun fromSourceLanguage(language: String): LanguageRenderModule {
             val lang = language.lowercase().trim()
             return when {
                 lang in CJK_LANGUAGES -> CJKModule(lang)
-                else -> LatinModule() // Spanish, Indonesian, English, etc.
+                else -> LatinModule()
             }
         }
 

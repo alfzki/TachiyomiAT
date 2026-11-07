@@ -183,8 +183,8 @@ class WebtoonTranslationsView : AbstractComposeView {
         }
 
         translation.activeBlocks.forEach { block ->
-            val padX = (block.symWidth * 2) * paddingMultiplier // FIXED: Match SmartTranslationBlock (was / 2)
-            val padY = block.symHeight * paddingMultiplier // FIXED: Match SmartTranslationBlock (was / 2)
+            val padX = minOf((block.symWidth * 1.5f) * paddingMultiplier, 32f)
+            val padY = minOf(block.symHeight * 0.8f * paddingMultiplier, 24f)
             val bgX = (block.x - padX / 2) * scaleFactor
             val bgY = (block.y - padY / 2) * scaleFactor
             val bgWidth = (block.width + padX) * scaleFactor
@@ -196,10 +196,10 @@ class WebtoonTranslationsView : AbstractComposeView {
             // Vertical ovals: Use high corner radius for elliptical appearance
             // Rectangles/Squares: Use moderate corner radius
             val backgroundShape = when (block.detectShape()) {
-                BubbleShape.HORIZONTAL_OVAL -> RoundedCornerShape(percent = 50) // Elliptical (Korean case)
-                BubbleShape.VERTICAL_OVAL -> RoundedCornerShape(percent = 50) // Elliptical
-                BubbleShape.SQUARE -> RoundedCornerShape(8.dp) // More rounded square
-                else -> RoundedCornerShape(6.dp) // Slightly rounded rectangles
+                BubbleShape.HORIZONTAL_OVAL, BubbleShape.VERTICAL_OVAL, BubbleShape.SQUARE -> RoundedCornerShape(
+                    percent = 50,
+                )
+                else -> RoundedCornerShape(12.dp)
             }
 
             Box(
@@ -247,9 +247,9 @@ class WebtoonTranslationsView : AbstractComposeView {
                 else -> 1.0f
             }
 
-            // Calculate padding (FIXED: must match TextBlockBackground rendering exactly)
-            val padX = (block.symWidth * 2) * paddingMultiplier // FIXED: Match SmartTranslationBlock (was / 2)
-            val padY = block.symHeight * paddingMultiplier // FIXED: Match SmartTranslationBlock (was / 2)
+            // Calculate padding (matches TextBlockBackground rendering exactly)
+            val padX = minOf((block.symWidth * 1.5f) * paddingMultiplier, 32f)
+            val padY = minOf(block.symHeight * 0.8f * paddingMultiplier, 24f)
 
             // Calculate position with padding offset (matches TextBlockBackground rendering)
             // Using max(..., 0.0f) to prevent negative coordinates

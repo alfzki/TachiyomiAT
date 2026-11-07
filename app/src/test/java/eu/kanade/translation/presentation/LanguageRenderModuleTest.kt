@@ -48,8 +48,8 @@ class LanguageRenderModuleTest {
     fun `LatinModule uses hybrid overflow and flexible font bounds`() {
         val latinModule = LanguageRenderModule.LatinModule()
         assertTrue(latinModule.useHybridOverflow)
-        assertEquals(10, latinModule.minFontSize)
-        assertEquals(12, latinModule.maxFontSize)
+        assertEquals(8, latinModule.minFontSize)
+        assertEquals(13, latinModule.maxFontSize)
         assertEquals(0.95f, latinModule.ovalHeightMargin)
     }
 

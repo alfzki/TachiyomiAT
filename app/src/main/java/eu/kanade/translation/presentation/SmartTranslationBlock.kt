@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -85,12 +87,13 @@ private const val LATIN_WIDTH_SAFETY_MARGIN = 0.98f
 private const val LATIN_HEIGHT_SAFETY_MARGIN = 0.99f
 private const val LATIN_OVAL_WIDTH_SAFETY_MARGIN = 0.98f
 private const val LATIN_OVAL_HEIGHT_SAFETY_MARGIN = 0.95f // Much more generous than CJK 70%
-private const val LATIN_VERTICAL_OVAL_WIDTH_SAFETY_MARGIN = 0.75f
-private const val LATIN_VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN = 0.95f
+private const val LATIN_VERTICAL_OVAL_WIDTH_SAFETY_MARGIN = 0.92f
+private const val LATIN_VERTICAL_OVAL_HEIGHT_SAFETY_MARGIN = 0.90f
 
 // Latin Expansion (hybrid overflow)
-private const val LATIN_MAX_EXPANSION = 1.3f
-private const val LATIN_MIN_FONT_SIZE = 10 // Can reduce to 10dp as fallback
+private const val LATIN_MAX_EXPANSION = 1.35f
+private const val LATIN_MIN_FONT_SIZE = 8 // Can reduce to 8sp to prevent mid-word breaking
+private const val LATIN_MAX_FONT_SIZE = 13
 
 // ============================================================================
 // Common Constants
@@ -118,9 +121,13 @@ fun SmartTranslationBlock(
     translatorType: String = "gemini",
     onBlockClick: (() -> Unit)? = null,
 ) {
-    // Determine language module based on source language
-    val languageModule = remember(sourceLanguage) {
-        LanguageRenderModule.fromSourceLanguage(sourceLanguage)
+    // Determine language module based on target translation language and script
+    val languageModule = remember(sourceLanguage, targetLanguage, block.translation) {
+        LanguageRenderModule.forTranslation(
+            targetLanguage = targetLanguage,
+            sourceLanguage = sourceLanguage,
+            textSample = block.translation,
+        )
     }
 
     // Get preferences from Metro DI via LocalContext
@@ -283,6 +290,7 @@ fun SmartTranslationBlock(
                     isVertical = isVertical,
                     isKoreanToEnglish = isKoreanToEnglish,
                     subcompose = { size, content -> subcompose(size, content) },
+                    density = density,
                 )
             } else {
                 // Latin: Use pre-calculated font size from hybrid overflow, or find optimal
@@ -297,6 +305,7 @@ fun SmartTranslationBlock(
                         constrainedWidthDp = constrainedWidthDp,
                         isVertical = isVertical,
                         subcompose = { size, content -> subcompose(size, content) },
+                        density = density,
                     )
                 }
             }
@@ -305,36 +314,33 @@ fun SmartTranslationBlock(
                 if (isCJKModule) MIN_FONT_SIZE.toInt() else LATIN_MIN_FONT_SIZE,
             ).sp
 
-            // Calculate max lines based on module
+            // Calculate max lines based on module with pixel-accurate line height
             val lineHeightMultiplier = if (isCJKModule) KOREAN_LINE_HEIGHT_MULTIPLIER else LATIN_LINE_HEIGHT_MULTIPLIER
-            val maxLines = calculateMaxLines(finalMaxHeightPx, fontSize, lineHeightMultiplier)
+            val maxLines = calculateMaxLines(finalMaxHeightPx, fontSize, lineHeightMultiplier, density)
 
-            // Render text with white background
+            // Render text cleanly centered inside bubble without duplicate background
             val textPlaceable = subcompose(Unit) {
-                Box(
+                Text(
+                    text = block.translation,
+                    fontSize = finalFontSize,
+                    fontFamily = fontFamily,
+                    color = Color.Black,
+                    softWrap = true,
+                    overflow = TextOverflow.Clip,
+                    textAlign = TextAlign.Center,
+                    maxLines = maxLines,
                     modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.9f))
-                        .wrapContentSize(),
-                ) {
-                    Text(
-                        text = block.translation,
-                        fontSize = finalFontSize,
-                        fontFamily = fontFamily,
-                        color = Color.Black,
-                        softWrap = true,
-                        overflow = TextOverflow.Clip,
-                        textAlign = TextAlign.Justify,
-                        maxLines = maxLines,
-                        modifier = Modifier
-                            .width(constrainedWidthDp)
-                            .rotate(if (isVertical) 0f else block.angle)
-                            .align(Alignment.Center),
-                    )
-                }
-            }[0].measure(Constraints(maxWidth = finalMaxWidthPx, maxHeight = finalMaxHeightPx))
+                        .widthIn(max = constrainedWidthDp)
+                        .rotate(if (isVertical) 0f else block.angle),
+                )
+            }[0].measure(
+                Constraints(minWidth = 0, maxWidth = finalMaxWidthPx, minHeight = 0, maxHeight = finalMaxHeightPx),
+            )
 
             layout(constraints.maxWidth, constraints.maxHeight) {
-                textPlaceable.place(0, 0)
+                val placeX = ((constraints.maxWidth - textPlaceable.width) / 2).coerceAtLeast(0)
+                val placeY = ((constraints.maxHeight - textPlaceable.height) / 2).coerceAtLeast(0)
+                textPlaceable.place(placeX, placeY)
             }
         }
     }
@@ -487,6 +493,7 @@ private fun findOptimalFontSizeCJK(
     isVertical: Boolean,
     isKoreanToEnglish: Boolean,
     subcompose: (Any, @Composable () -> Unit) -> List<androidx.compose.ui.layout.Measurable>,
+    density: Density,
 ): Int {
     var low = MIN_FONT_SIZE.toInt()
     var high = CJK_MAX_FONT_SIZE.toInt()
@@ -501,8 +508,8 @@ private fun findOptimalFontSizeCJK(
                 fontFamily = fontFamily,
                 color = Color.Black,
                 overflow = TextOverflow.Clip,
-                textAlign = TextAlign.Justify,
-                maxLines = calculateMaxLines(finalMaxHeightPx, mid, KOREAN_LINE_HEIGHT_MULTIPLIER),
+                textAlign = TextAlign.Center,
+                maxLines = calculateMaxLines(finalMaxHeightPx, mid, KOREAN_LINE_HEIGHT_MULTIPLIER, density),
                 softWrap = true,
                 modifier = Modifier
                     .width(constrainedWidthDp)
@@ -561,60 +568,38 @@ private fun getLatinShapeConfig(
  * Calculate optimal dimensions for Latin translations using HYBRID OVERFLOW STRATEGY.
  *
  * Strategy:
- * 1. Try fitting text at base size with 12dp font
- * 2. If doesn't fit, expand bubble up to 1.3x
- * 3. If still doesn't fit, reduce font to 10dp
+ * 1. For vertical bubbles, adjust aspect ratio slightly so horizontal Latin words fit.
+ * 2. Expand bubble moderately depending on text length.
+ * 3. Return fontSize = 0 to dynamically find the optimal font size (8sp - 13sp) preventing text clipping.
  */
 private fun calculateLatinOptimalDimensions(
     text: String,
     baseWidth: Dp,
     baseHeight: Dp,
 ): BubbleDimensions {
-    // Short text: Use base dimensions with 12dp
-    if (text.length < 30) {
-        return BubbleDimensions(
-            width = baseWidth,
-            height = baseHeight,
-            expansionRatio = 1.0f,
-            fontSize = CJK_MAX_FONT_SIZE.toInt(),
-        )
+    // If the bubble is strongly vertical (tall manga bubble), adjust width slightly so horizontal words fit
+    val isVerticalShape = baseHeight > baseWidth * 1.3f
+    val widthMultiplier = if (isVerticalShape) 1.25f else 1.0f
+    val heightMultiplier = if (isVerticalShape) 0.95f else 1.0f
+
+    val expansion = when {
+        text.length > 150 -> LATIN_MAX_EXPANSION
+        text.length > 70 -> 1.2f
+        text.length > 30 -> 1.1f
+        else -> 1.0f
     }
 
-    // Medium text (30-100 chars): Slight expansion
-    if (text.length < 100) {
-        val expansion = 1.1f
-        return BubbleDimensions(
-            width = baseWidth * expansion,
-            height = baseHeight * expansion,
-            expansionRatio = expansion,
-            fontSize = CJK_MAX_FONT_SIZE.toInt(),
-        )
-    }
-
-    // Longer text (100-200 chars): Moderate expansion
-    if (text.length < 200) {
-        val expansion = 1.2f
-        return BubbleDimensions(
-            width = baseWidth * expansion,
-            height = baseHeight * expansion,
-            expansionRatio = expansion,
-            fontSize = CJK_MAX_FONT_SIZE.toInt(),
-        )
-    }
-
-    // Very long text (200+ chars): Max expansion with potential font reduction
-    // Let the font size finder handle this - return max expansion with flag
     return BubbleDimensions(
-        width = baseWidth * LATIN_MAX_EXPANSION,
-        height = baseHeight * LATIN_MAX_EXPANSION,
-        expansionRatio = LATIN_MAX_EXPANSION,
-        fontSize = 0, // Signal to use font size finder
+        width = baseWidth * widthMultiplier * expansion,
+        height = baseHeight * heightMultiplier * expansion,
+        expansionRatio = expansion,
+        fontSize = 0, // Always use font size finder to guarantee optimal fit without clipping or mid-word breaking
     )
 }
 
 /**
  * Find optimal font size for Latin using binary search.
- * Can reduce to 10dp if text still doesn't fit at 12dp.
+ * Adapts between 8sp and 13sp, ensuring words fit without breaking mid-word.
  */
 private fun findOptimalFontSizeLatin(
     block: TranslationBlock,
@@ -624,13 +609,26 @@ private fun findOptimalFontSizeLatin(
     constrainedWidthDp: Dp,
     isVertical: Boolean,
     subcompose: (Any, @Composable () -> Unit) -> List<androidx.compose.ui.layout.Measurable>,
+    density: Density,
 ): Int {
     var low = LATIN_MIN_FONT_SIZE
-    var high = CJK_MAX_FONT_SIZE.toInt()
+    var high = LATIN_MAX_FONT_SIZE
     var bestSize = low
+
+    // Identify the longest word to make sure it doesn't get chopped mid-word
+    val words = block.translation.split(Regex("\\s+")).filter { it.isNotBlank() }
+    val longestWordLength = words.maxOfOrNull { it.length } ?: 0
 
     while (low <= high) {
         val mid = ((low + high) / 2).coerceAtLeast(LATIN_MIN_FONT_SIZE)
+
+        // Estimated character width in pixels: if longest word alone exceeds maxWidth, reduce font
+        val estWordWidthPx = longestWordLength * (mid * 1.4f)
+        if (longestWordLength > 4 && estWordWidthPx > finalMaxWidthPx * 1.1f) {
+            high = mid - 1
+            continue
+        }
+
         val textLayoutResult = subcompose("latin_$mid") {
             Text(
                 text = block.translation,
@@ -638,8 +636,8 @@ private fun findOptimalFontSizeLatin(
                 fontFamily = fontFamily,
                 color = Color.Black,
                 overflow = TextOverflow.Clip,
-                textAlign = TextAlign.Justify,
-                maxLines = calculateMaxLines(finalMaxHeightPx, mid, LATIN_LINE_HEIGHT_MULTIPLIER),
+                textAlign = TextAlign.Center,
+                maxLines = calculateMaxLines(finalMaxHeightPx, mid, LATIN_LINE_HEIGHT_MULTIPLIER, density),
                 softWrap = true,
                 modifier = Modifier
                     .width(constrainedWidthDp)
@@ -665,10 +663,10 @@ private fun findOptimalFontSizeLatin(
 /**
  * Calculate maximum lines based on bubble height and font size.
  */
-private fun calculateMaxLines(heightPx: Int, fontSize: Int, lineHeightMultiplier: Float): Int {
-    val approximateLineHeight = fontSize * lineHeightMultiplier
-    val maxLines = (heightPx / approximateLineHeight).toInt().coerceAtLeast(1)
-    return maxLines.coerceAtMost(20)
+private fun calculateMaxLines(heightPx: Int, fontSize: Int, lineHeightMultiplier: Float, density: Density): Int {
+    val approximateLineHeightPx = with(density) { (fontSize.sp * lineHeightMultiplier).toPx() }
+    val maxLines = (heightPx / approximateLineHeightPx).toInt().coerceAtLeast(1)
+    return maxLines.coerceAtMost(25)
 }
 
 /**

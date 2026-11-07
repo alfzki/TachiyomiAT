@@ -59,6 +59,8 @@ fun MangaChapterListItem(
     downloadStateProvider: () -> Download.State,
     translationStateProvider: () -> Translation.State,
     downloadProgressProvider: () -> Int,
+    translationProgressProvider: () -> Pair<Int, Int> = { 0 to 0 },
+    translationErrorProvider: () -> String? = { null },
     chapterSwipeStartAction: LibraryPreferences.ChapterSwipeAction,
     chapterSwipeEndAction: LibraryPreferences.ChapterSwipeAction,
     onLongClick: () -> Unit,
@@ -179,6 +181,8 @@ fun MangaChapterListItem(
                     enabled = true,
                     modifier = Modifier.padding(start = 4.dp),
                     translationStateProvider = translationStateProvider,
+                    translationProgressProvider = translationProgressProvider,
+                    translationErrorProvider = translationErrorProvider,
                     onClick = { onTranslationClick?.invoke(it) },
                 )
             }

@@ -4,11 +4,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
+import eu.kanade.tachiyomi.R
 import mihon.icons.materialsymbols.MaterialSymbols
 import mihon.icons.materialsymbols.rounded.Bookmark
-import mihon.icons.materialsymbols.rounded.Translate
 import mihon.icons.materialsymbols.roundedfilled.Bookmark
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.at.ATMR
@@ -46,11 +48,17 @@ fun ReaderTopBar(
                                     ATMR.strings.action_show_translations
                                 },
                             ),
-                            icon = MaterialSymbols.Rounded.Translate,
+                            icon = ImageVector.vectorResource(
+                                if (showTranslations) {
+                                    R.drawable.ic_translate_reader
+                                } else {
+                                    R.drawable.ic_translate_reader_off
+                                },
+                            ),
                             iconTint = if (showTranslations) {
                                 MaterialTheme.colorScheme.primary
                             } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                             },
                             onClick = onToggleShowTranslations,
                         ),

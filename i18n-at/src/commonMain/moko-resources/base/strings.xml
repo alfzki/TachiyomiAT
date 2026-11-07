@@ -46,4 +46,16 @@
     <string name="pref_translation_oval_height">Oval Height %</string>
     <string name="pref_translation_h_padding">Horizontal Padding</string>
     <string name="pref_translation_v_padding">Vertical Padding</string>
+
+    <!-- Translation Queue & Errors -->
+    <string name="label_translation_queue">Translation queue</string>
+    <string name="translation_queue_empty">Translation queue is empty</string>
+    <string name="translation_error_title">Translation Failed</string>
+    <string name="translation_error_not_downloaded">Chapter must be downloaded first before translating</string>
+    <string name="translation_error_api_key_missing">API key is missing in Translation Settings</string>
+    <string name="translation_error_quota_exceeded">API quota or rate limit exceeded</string>
+    <string name="translation_error_network">Network connection failed during translation</string>
+    <string name="translation_error_generic">Translation failed: %s</string>
+    <string name="translation_pages_progress">%1$d of %2$d pages</string>
+    <string name="action_view_translation_queue">View Translation Queue</string>
 </resources>

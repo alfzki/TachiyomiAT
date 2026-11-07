@@ -47,6 +47,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToStream
 import logcat.LogPriority
 import mihon.core.archive.archiveReader
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
@@ -238,6 +239,9 @@ class ChapterTranslator(
 
     private suspend fun translateChapter(translation: Translation) {
         try {
+            translation.error = null
+            translation.progress = 0
+
             // Directory where chapter images is stored
             val chapterPath = downloadProvider.findChapterDir(
                 chapterName = translation.chapter.name,
@@ -246,6 +250,7 @@ class ChapterTranslator(
                 mangaTitle = translation.manga.title,
                 source = translation.source,
             ) ?: run {
+                translation.error = context.stringResource(ATMR.strings.translation_error_not_downloaded)
                 translation.status = Translation.State.ERROR
                 return
             }
@@ -272,6 +277,22 @@ class ChapterTranslator(
             }
             // Check if translator reinitialization is needed
             val selectedEngine = TextTranslators.fromPref(translationPreferences.translationEngine())
+
+            // Validate API key if selected engine requires it
+            if (selectedEngine in
+                listOf(TextTranslators.GOOGLE_CLOUD, TextTranslators.GEMINI, TextTranslators.OPENROUTER)
+            ) {
+                val apiKey: String = when (selectedEngine) {
+                    TextTranslators.GOOGLE_CLOUD -> translationPreferences.cloudTranslationApiKey().get()
+                    else -> translationPreferences.translationEngineApiKey().get()
+                }
+                if (apiKey.isBlank()) {
+                    translation.error = context.stringResource(ATMR.strings.translation_error_api_key_missing)
+                    translation.status = Translation.State.ERROR
+                    return
+                }
+            }
+
             val currentAICoreTranslator = textTranslator as? AICoreTranslator
             val aicoreParamsChanged = currentAICoreTranslator != null && (
                 currentAICoreTranslator.modelVariant !=
@@ -316,7 +337,8 @@ class ChapterTranslator(
                                     .map { it.name }
                                     .toList()
                             }
-                            for (entryName in entries) {
+                            translation.totalPages = entries.size
+                            for ((index, entryName) in entries.withIndex()) {
                                 coroutineContext.ensureActive()
                                 reader.getInputStream(entryName)!!.use { inStream ->
                                     tmpFile.outputStream().use { outStream -> inStream.copyTo(outStream) }
@@ -334,6 +356,7 @@ class ChapterTranslator(
                                         engine = selectedEngine,
                                     )
                                 if (pageTranslation.blocks.isNotEmpty()) pages[entryName] = pageTranslation
+                                translation.progress = index + 1
                             }
 
                             val translationContext = TranslationContext(
@@ -355,7 +378,8 @@ class ChapterTranslator(
                             .sortedWith { f1, f2 ->
                                 f1.name.orEmpty().compareToCaseInsensitiveNaturalOrder(f2.name.orEmpty())
                             }
-                        for (file in files) {
+                        translation.totalPages = files.size
+                        for ((index, file) in files.withIndex()) {
                             coroutineContext.ensureActive()
                             file.openInputStream().use { inStream ->
                                 tmpFile.outputStream().use { outStream -> inStream.copyTo(outStream) }
@@ -373,6 +397,7 @@ class ChapterTranslator(
                                     engine = selectedEngine,
                                 )
                             if (pageTranslation.blocks.isNotEmpty()) pages[file.name!!] = pageTranslation
+                            translation.progress = index + 1
                         }
 
                         val translationContext = TranslationContext(
@@ -397,14 +422,29 @@ class ChapterTranslator(
             // Serialize the Map and save to translations json file
             val targetFile = translationMangaDir.findFile(saveFile) ?: translationMangaDir.createFile(saveFile)!!
             Json.encodeToStream(pages, targetFile.openOutputStream())
+            translation.error = null
+            translation.progress = translation.totalPages
             translation.status = Translation.State.TRANSLATED
         } catch (e: AICoreUnavailableException) {
             withContext(Dispatchers.Main) {
                 context.toast(ATMR.strings.error_aicore_unavailable)
             }
+            translation.error = context.stringResource(ATMR.strings.error_aicore_unavailable)
             translation.status = Translation.State.ERROR
             logcat(LogPriority.ERROR, e)
         } catch (error: Throwable) {
+            val message = error.message.orEmpty()
+            val userMsg = when {
+                message.contains("429") || message.contains("quota", ignoreCase = true) ||
+                    message.contains("rate", ignoreCase = true) ->
+                    context.stringResource(ATMR.strings.translation_error_quota_exceeded)
+                message.contains("network", ignoreCase = true) || message.contains("timeout", ignoreCase = true) ||
+                    message.contains("connect", ignoreCase = true) ->
+                    context.stringResource(ATMR.strings.translation_error_network)
+                message.isNotBlank() -> message
+                else -> context.stringResource(ATMR.strings.translation_error_generic, "Unknown error")
+            }
+            translation.error = userMsg
             translation.status = Translation.State.ERROR
             logcat(LogPriority.ERROR, error)
         }
@@ -608,8 +648,11 @@ class ChapterTranslator(
             val firstElement = firstLine?.elements?.firstOrNull()
             val firstSymbol = firstElement?.symbols?.firstOrNull()
             val symBounds = firstSymbol?.boundingBox ?: firstElement?.boundingBox
-            val symWidth = symBounds?.width()?.toFloat() ?: (bounds.width().toFloat() / maxOf(1, cleanText.length))
-            val symHeight = symBounds?.height()?.toFloat() ?: bounds.height().toFloat()
+            val lineCount = maxOf(1, block.lines.size)
+            val rawSymWidth = symBounds?.width()?.toFloat() ?: (bounds.width().toFloat() / maxOf(1, cleanText.length))
+            val rawSymHeight = symBounds?.height()?.toFloat() ?: (bounds.height().toFloat() / lineCount)
+            val symWidth = rawSymWidth.coerceIn(8f, 36f)
+            val symHeight = rawSymHeight.coerceIn(12f, 48f)
             val angle = firstLine?.angle ?: 0f
 
             translation.blocks.add(
@@ -647,6 +690,8 @@ class ChapterTranslator(
     }
 
     private fun addToQueue(translation: Translation) {
+        translation.error = null
+        translation.progress = 0
         translation.status = Translation.State.QUEUE
         _queueState.update {
             it + translation
@@ -686,6 +731,14 @@ class ChapterTranslator(
 
     fun removeFromQueue(manga: Manga) {
         removeFromQueueIf { it.manga.id == manga.id }
+    }
+
+    fun reorderQueue(translations: List<Translation>) {
+        _queueState.update { currentQueue ->
+            val set = translations.toSet()
+            val remaining = currentQueue.filterNot { it in set }
+            translations + remaining
+        }
     }
 
     private fun internalClearQueue() {

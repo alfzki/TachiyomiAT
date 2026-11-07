@@ -196,6 +196,8 @@ class MangaViewModel(
     // Progress ticks often, so only the download indicators that read it recompose instead of every tick rebuilding
     // the chapter list
     private val downloadProgress = mutableStateMapOf<Long, Int>()
+    private val translationProgress = mutableStateMapOf<Long, Pair<Int, Int>>()
+    private val translationErrors = mutableStateMapOf<Long, String?>()
 
     // A finished chapter leaves the queue, and its last status change can be lost with it, so its state is left to
     // the queried item once it's no longer queued
@@ -329,6 +331,14 @@ class MangaViewModel(
                 .filter { it.manga.id == mangaId }
                 .catch { logcat(LogPriority.ERROR, it) }
                 .collect(::updateTranslationState)
+        }
+        viewModelScope.launch(Dispatchers.Default) {
+            translationManager.progressFlow()
+                .filter { it.manga.id == mangaId }
+                .catch { logcat(LogPriority.ERROR, it) }
+                .collect {
+                    translationProgress[it.chapter.id] = it.progress to it.totalPages
+                }
         }
         viewModelScope.launch(Dispatchers.Default) {
             downloadManager.progressFlow()
@@ -615,10 +625,25 @@ class MangaViewModel(
         translationStates.update {
             it + (chapterId to translation.status)
         }
+        translationProgress[chapterId] = translation.progress to translation.totalPages
+        translationErrors[chapterId] = translation.error
     }
 
     fun getDownloadProgress(chapterId: Long): Int {
         return downloadProgress[chapterId] ?: 0
+    }
+
+    fun getTranslationProgress(chapterId: Long): Pair<Int, Int> {
+        return translationProgress[chapterId]
+            ?: (
+                translationManager.getQueuedTranslationOrNull(chapterId)?.let { it.progress to it.totalPages }
+                    ?: (0 to 0)
+                )
+    }
+
+    fun getTranslationError(chapterId: Long): String? {
+        return translationErrors[chapterId]
+            ?: translationManager.getQueuedTranslationOrNull(chapterId)?.error
     }
 
     private fun List<Chapter>.toChapterListItems(manga: Manga, source: Source): List<ChapterList.Item> {

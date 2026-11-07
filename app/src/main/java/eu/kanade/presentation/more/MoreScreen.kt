@@ -18,9 +18,11 @@ import mihon.icons.materialsymbols.rounded.Info
 import mihon.icons.materialsymbols.rounded.QueryStats
 import mihon.icons.materialsymbols.rounded.Settings
 import mihon.icons.materialsymbols.rounded.Storage
+import mihon.icons.materialsymbols.rounded.Translate
 import mihon.icons.materialsymbols.roundedfilled.VolunteerActivism
 import tachiyomi.core.common.Constants
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.at.ATMR
 import tachiyomi.presentation.core.components.ScrollbarLazyColumn
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.pluralStringResource
@@ -34,6 +36,7 @@ fun MoreScreen(
     incognitoMode: Boolean,
     onIncognitoModeChange: (Boolean) -> Unit,
     onClickDownloadQueue: () -> Unit,
+    onClickTranslationQueue: () -> Unit = {},
     onClickCategories: () -> Unit,
     onClickStats: () -> Unit,
     onClickDataAndStorage: () -> Unit,
@@ -98,6 +101,13 @@ fun MoreScreen(
                     },
                     icon = MaterialSymbols.Rounded.Download,
                     onPreferenceClick = onClickDownloadQueue,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(ATMR.strings.label_translation_queue),
+                    icon = MaterialSymbols.Rounded.Translate,
+                    onPreferenceClick = onClickTranslationQueue,
                 )
             }
             item {

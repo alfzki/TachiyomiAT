@@ -22,10 +22,10 @@ data class PageTranslation(
         get() = ProfileType.fromSourceLanguage(sourceLanguage)
 
     /**
-     * Active (non-deleted) blocks on the page.
+     * Active (non-deleted and non-empty) blocks on the page.
      */
     val activeBlocks: List<TranslationBlock>
-        get() = blocks
+        get() = blocks.filter { it.translation.isNotBlank() }
 
     /**
      * Delete a block by index.

@@ -4,11 +4,13 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,8 +50,10 @@ fun ChapterTranslationIndicator(
     translationStateProvider: () -> Translation.State,
     onClick: (ChapterTranslationAction) -> Unit,
     modifier: Modifier = Modifier,
+    translationProgressProvider: () -> Pair<Int, Int> = { 0 to 0 },
+    translationErrorProvider: () -> String? = { null },
 ) {
-    when (val translationState = translationStateProvider()) {
+    when (translationStateProvider()) {
         Translation.State.NOT_TRANSLATED -> NotTranslatedIndicator(
             enabled = enabled,
             modifier = modifier,
@@ -59,6 +63,7 @@ fun ChapterTranslationIndicator(
             enabled = enabled,
             modifier = modifier,
             onClick = onClick,
+            progressProvider = translationProgressProvider,
         )
         Translation.State.TRANSLATED -> TranslatedIndicator(
             enabled = enabled,
@@ -69,6 +74,7 @@ fun ChapterTranslationIndicator(
             enabled = enabled,
             modifier = modifier,
             onClick = onClick,
+            errorProvider = translationErrorProvider,
         )
     }
 }
@@ -105,6 +111,7 @@ private fun TranslatingIndicator(
     enabled: Boolean,
     onClick: (ChapterTranslationAction) -> Unit,
     modifier: Modifier = Modifier,
+    progressProvider: () -> Pair<Int, Int> = { 0 to 0 },
 ) {
     var isMenuExpanded by remember { mutableStateOf(false) }
     Box(
@@ -119,16 +126,41 @@ private fun TranslatingIndicator(
         contentAlignment = Alignment.Center,
     ) {
         val strokeColor = MaterialTheme.colorScheme.onSurfaceVariant
+        val (progress, totalPages) = progressProvider()
 
-        CircularProgressIndicator(
-            modifier = IndicatorModifier,
-            color = strokeColor,
-            strokeWidth = IndicatorStrokeWidth,
-            trackColor = Color.Transparent,
-            strokeCap = StrokeCap.Butt,
-        )
+        if (totalPages > 0) {
+            CircularProgressIndicator(
+                progress = { (progress.toFloat() / totalPages.toFloat()).coerceIn(0f, 1f) },
+                modifier = IndicatorModifier,
+                color = strokeColor,
+                strokeWidth = IndicatorStrokeWidth,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeCap = StrokeCap.Round,
+            )
+        } else {
+            CircularProgressIndicator(
+                modifier = IndicatorModifier,
+                color = strokeColor,
+                strokeWidth = IndicatorStrokeWidth,
+                trackColor = Color.Transparent,
+                strokeCap = StrokeCap.Butt,
+            )
+        }
 
         DropdownMenu(expanded = isMenuExpanded, onDismissRequest = { isMenuExpanded = false }) {
+            if (totalPages > 0) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = stringResource(ATMR.strings.translation_pages_progress, progress, totalPages),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    onClick = {},
+                    enabled = false,
+                )
+            }
             DropdownMenuItem(
                 text = { Text(text = stringResource(MR.strings.action_cancel)) },
                 onClick = {
@@ -187,15 +219,46 @@ private fun ErrorIndicator(
     enabled: Boolean,
     modifier: Modifier = Modifier,
     onClick: (ChapterTranslationAction) -> Unit,
+    errorProvider: () -> String? = { null },
 ) {
+    var showErrorDialog by remember { mutableStateOf(false) }
+
+    if (showErrorDialog) {
+        val errorMessage = errorProvider() ?: stringResource(MR.strings.unknown_error)
+        AlertDialog(
+            onDismissRequest = { showErrorDialog = false },
+            title = {
+                Text(text = stringResource(ATMR.strings.translation_error_title))
+            },
+            text = {
+                Text(text = errorMessage)
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showErrorDialog = false
+                        onClick(ChapterTranslationAction.START)
+                    },
+                ) {
+                    Text(text = stringResource(MR.strings.action_retry))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showErrorDialog = false }) {
+                    Text(text = stringResource(MR.strings.action_cancel))
+                }
+            },
+        )
+    }
+
     Box(
         modifier = modifier
             .size(IconButtonTokens.StateLayerSize)
             .commonClickable(
                 enabled = enabled,
                 hapticFeedback = LocalHapticFeedback.current,
-                onLongClick = { onClick(ChapterTranslationAction.START) },
-                onClick = { onClick(ChapterTranslationAction.START) },
+                onLongClick = { showErrorDialog = true },
+                onClick = { showErrorDialog = true },
             ),
         contentAlignment = Alignment.Center,
     ) {

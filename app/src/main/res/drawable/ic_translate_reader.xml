@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Tint-safe translation active icon using evenOdd cutout holes -->
+    <!-- Top-left card with cutout character -->
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M3,4C3,2.9 3.9,2 5,2H12C13.1,2 14,2.9 14,4V8.5H12.5V3.5H4.5V8.5H3V4ZM6,4.5H11V5.5H9V8H8V5.5H6V4.5Z"/>
+    <!-- Bottom-right card with cutout 'A' -->
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M10,9C10,7.9 10.9,7 12,7H19C20.1,7 21,7.9 21,9V18C21,19.1 20.1,20 19,20H12C10.9,20 10,19.1 10,18V9ZM12,8.5H19C19.3,8.5 19.5,8.7 19.5,9V18C19.5,18.3 19.3,18.5 19,18.5H12C11.7,18.5 11.5,18.3 11.5,18V9C11.5,8.7 11.7,8.5 12,8.5ZM15.5,10.5L13.5,16.5H14.7L15.1,15.2H16.7L17.1,16.5H18.3L16.3,10.5H15.5ZM15.4,14.2L15.9,12.4L16.4,14.2H15.4Z"/>
+</vector>
