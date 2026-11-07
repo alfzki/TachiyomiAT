@@ -4,6 +4,7 @@ import eu.kanade.translation.model.TranslationBlock
 import eu.kanade.translation.model.TranslationContext
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -273,5 +274,26 @@ class AICoreTranslatorTest {
         assertEquals(AICoreModelVariant.GEMMA_4_E4B, AICoreModelVariant.fromPref(2))
         assertEquals(AICoreModelVariant.DEFAULT_STABLE, AICoreModelVariant.fromPref(-1))
         assertEquals(AICoreModelVariant.DEFAULT_STABLE, AICoreModelVariant.fromPref(99))
+    }
+
+    @Test
+    fun `isPolicyOrSafetyError detects safety check and error code 4`() {
+        val genAiError = RuntimeException(
+            "com.google.mlkit.genai.common.GenAiException: [ErrorCode 4] Request doesn't pass certain policy check.",
+            RuntimeException("AICore failed with error type 2-INFERENCE_ERROR: Inference failed."),
+        )
+        assertTrue(AICoreTranslator.isPolicyOrSafetyError(genAiError))
+
+        val nestedSafetyError = RuntimeException(
+            "Wrapper exception",
+            RuntimeException("Safety check blocked request with action DELETE (statusCode = 4)"),
+        )
+        assertTrue(AICoreTranslator.isPolicyOrSafetyError(nestedSafetyError))
+
+        val ordinaryError = RuntimeException(
+            "Connection timed out",
+            IllegalStateException("Unknown socket error"),
+        )
+        assertFalse(AICoreTranslator.isPolicyOrSafetyError(ordinaryError))
     }
 }

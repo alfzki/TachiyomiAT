@@ -332,6 +332,7 @@ class AICoreTranslator(
 
     private suspend fun generateWithRetry(
         request: com.google.mlkit.genai.prompt.GenerateContentRequest,
+        isMultimodal: Boolean = false,
     ): com.google.mlkit.genai.prompt.GenerateContentResponse? {
         var lastError: Throwable? = null
         for (attempt in 0..2) {
@@ -351,6 +352,12 @@ class AICoreTranslator(
                 return m.generateContent(request)
             } catch (t: Throwable) {
                 lastError = t
+                if (isPolicyOrSafetyError(t)) {
+                    logcat(LogPriority.INFO) {
+                        "AICore: request blocked by AICore on-device safety policy ([ErrorCode 4]), skipping retry"
+                    }
+                    return null
+                }
                 logcat(LogPriority.WARN, t) { "AICore generateWithRetry attempt $attempt failed" }
             }
         }
@@ -383,13 +390,12 @@ class AICoreTranslator(
                     maxOutputTokens = clampedMaxOutputTokens
                 }
             }
-            val resp = generateWithRetry(request)
+            val resp = generateWithRetry(request, isMultimodal = true)
             if (resp != null) {
                 logcat(LogPriority.INFO) { "AICore: multimodal call succeeded!" }
                 return resp
             }
             logcat(LogPriority.WARN) { "AICore multimodal call failed with retry, falling back to text-only" }
-            multimediaSupported = false
         }
 
         logcat(LogPriority.INFO) { "AICore: attempting text-only call..." }
@@ -404,7 +410,7 @@ class AICoreTranslator(
                 maxOutputTokens = clampedMaxOutputTokens
             }
         }
-        val resp = generateWithRetry(request)
+        val resp = generateWithRetry(request, isMultimodal = false)
         if (resp != null) {
             logcat(LogPriority.INFO) { "AICore: text-only call succeeded!" }
         }
@@ -420,6 +426,21 @@ class AICoreTranslator(
         private val json = Json {
             ignoreUnknownKeys = true
             isLenient = true
+        }
+
+        internal fun isPolicyOrSafetyError(t: Throwable): Boolean {
+            var curr: Throwable? = t
+            while (curr != null) {
+                val msg = curr.message.orEmpty()
+                if (msg.contains("ErrorCode 4", ignoreCase = true) ||
+                    msg.contains("policy check", ignoreCase = true) ||
+                    msg.contains("Safety check", ignoreCase = true)
+                ) {
+                    return true
+                }
+                curr = curr.cause
+            }
+            return false
         }
 
         fun normalizeOcrText(text: String): String {
