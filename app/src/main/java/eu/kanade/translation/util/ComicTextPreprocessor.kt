@@ -181,25 +181,36 @@ object ComicTextPreprocessor {
 
         // Comic / manhua / martial arts OCR stroke confusions
         result = replacePreservingCase(result, "\\bOTHEER\\b", "OTHER")
+        result = replacePreservingCase(result, "\\bSEGTSAT\\b|\\bSBGTS\\s+AT\\b", "SECTS AT")
         result = replacePreservingCase(result, "\\bSBGTS\\b|\\bSEGTS\\b", "SECTS")
         result = replacePreservingCase(result, "\\bSEGT\\b", "SECT")
-        result = replacePreservingCase(result, "\\bDISGIPLES\\b|\\bDICIPLES\\b", "DISCIPLES")
-        result = replacePreservingCase(result, "\\bDISGIPLE\\b|\\bDICIPLE\\b", "DISCIPLE")
-        result = replacePreservingCase(result, "\\bSTL\\b|\\bSTIL\\b", "STILL")
+        result = replacePreservingCase(result, "\\bDISGIPLES\\b|\\bDICIPLES\\b|\\bDISCPLES\\b", "DISCIPLES")
+        result = replacePreservingCase(result, "\\bDISGIPLE\\b|\\bDICIPLE\\b|\\bDISCPLE\\b", "DISCIPLE")
+        result = replacePreservingCase(result, "\\bSTL\\b|\\bSTIL\\b|\\bSULL\\b", "STILL")
         result = replacePreservingCase(result, "\\bEXUEND\\b", "EXTEND")
+        result = replacePreservingCase(result, "\\bA\\s+CHAND\\b", "A HAND")
         result = replacePreservingCase(result, "\\bFRENDSHIP\\b", "FRIENDSHIP")
         result = replacePreservingCase(result, "\\bFRENDS\\b", "FRIENDS")
         result = replacePreservingCase(result, "\\bFREND\\b", "FRIEND")
         result = replacePreservingCase(result, "\\bPAVLION\\b", "PAVILION")
         result = replacePreservingCase(result, "\\bMEAVEN\\b", "HEAVEN")
         result = replacePreservingCase(result, "\\bAIGH\\s+HEAVEN\\b", "HIGH HEAVEN")
+        result = replacePreservingCase(result, "\\bLAMA\\s+DISCIPLE\\b|\\bIAMADISCIPLE\\b", "I AM A DISCIPLE")
+        result = replacePreservingCase(result, "\\bHASA\\b", "HAS A")
+        result = replacePreservingCase(result, "\\bBYTHE\\b", "BY THE")
+        result = replacePreservingCase(result, "\\bACCEPTA\\b", "ACCEPT A")
+        result = replacePreservingCase(result, "\\bTHEY\\s+LL\\b", "THEY'LL")
+        result = replacePreservingCase(result, "\\bONES\\s+(?=HAND\\b)", "ONE'S ")
+        result = replacePreservingCase(result, "\\bCOMPORTIS\\b", "COMFORT IS")
+        result = replacePreservingCase(result, "\\bOBVIOUSLYI\\b", "OBVIOUSLY I")
+        result = replacePreservingCase(result, "\\bHAPPENAGAIN\\b", "HAPPEN AGAIN")
         result = replacePreservingCase(result, "\\bSPECAL\\b", "SPECIAL")
         result = replacePreservingCase(result, "\\bREQURED\\b", "REQUIRED")
         result = replacePreservingCase(result, "\\bTO\\s+TRAN\\b", "TO TRAIN")
         result = replacePreservingCase(result, "\\bNAMB\\b", "NAME")
         result = replacePreservingCase(result, "\\bEVIGT\\b", "EVICT")
         result = Regex(
-            "\\b(EVICT|EVIGT|TO|LET|GIVE|TELL|WITH|FOR|HELP|BEAT|SAVING)(\\s+)(MB)\\b",
+            "\\b(EVICT|EVIGT|TO|LET|GIVE|TELL|WITH|FOR|HELP|BEAT|SAVING)(\\s+)(MB|MEB)\\b",
             RegexOption.IGNORE_CASE,
         ).replace(result) { m ->
             val prefix = m.groupValues[1] + m.groupValues[2]

@@ -645,7 +645,7 @@ class ChapterTranslator(
         val origWidth = boundsOptions.outWidth
         val origHeight = boundsOptions.outHeight
 
-        if (origWidth in 1..1399 && origHeight in 1..4096) {
+        if (origWidth in 1..599 && origHeight in 1..4096) {
             var rawBitmap: Bitmap? = null
             var scaledBitmap: Bitmap? = null
             try {
