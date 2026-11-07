@@ -50,9 +50,9 @@ fun SmartTranslationBlock(
             val maxWidthPx = maxOf(1, with(density) { width.roundToPx() })
             val maxHeightPx = maxOf(1, with(density) { height.roundToPx() })
 
-            // Binary search for optimal font size (capped at 28sp for natural comic typography)
+            // Binary search for optimal font size (capped at 50sp for natural comic typography)
             var low = 1
-            var high = 28
+            var high = 50
             var bestSize = low
 
             while (low <= high) {
