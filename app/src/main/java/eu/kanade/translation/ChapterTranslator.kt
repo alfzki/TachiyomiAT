@@ -55,6 +55,7 @@ import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.translation.TranslationPreferences
 import tachiyomi.i18n.at.ATMR
+import java.io.File
 import java.io.InputStream
 import kotlin.math.abs
 
@@ -343,17 +344,16 @@ class ChapterTranslator(
                                 reader.getInputStream(entryName)!!.use { inStream ->
                                     tmpFile.outputStream().use { outStream -> inStream.copyTo(outStream) }
                                 }
-                                val image = InputImage.fromFilePath(context, android.net.Uri.fromFile(tmpFile))
-                                val result = recognizer.recognize(image)
-                                val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
+                                val ocrResult = recognizeFileWithUpscaling(tmpFile, recognizer)
                                 val pageTranslation =
                                     convertToPageTranslation(
-                                        blocks = blocks,
-                                        width = image.width,
-                                        height = image.height,
+                                        blocks = ocrResult.blocks,
+                                        width = ocrResult.origWidth,
+                                        height = ocrResult.origHeight,
                                         fromLang = effectiveFromLang,
                                         toLang = translation.toLang,
                                         engine = selectedEngine,
+                                        ocrScale = ocrResult.scaleFactor,
                                     )
                                 if (pageTranslation.blocks.isNotEmpty()) pages[entryName] = pageTranslation
                                 translation.progress = index + 1
@@ -384,17 +384,16 @@ class ChapterTranslator(
                             file.openInputStream().use { inStream ->
                                 tmpFile.outputStream().use { outStream -> inStream.copyTo(outStream) }
                             }
-                            val image = InputImage.fromFilePath(context, android.net.Uri.fromFile(tmpFile))
-                            val result = recognizer.recognize(image)
-                            val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
+                            val ocrResult = recognizeFileWithUpscaling(tmpFile, recognizer)
                             val pageTranslation =
                                 convertToPageTranslation(
-                                    blocks = blocks,
-                                    width = image.width,
-                                    height = image.height,
+                                    blocks = ocrResult.blocks,
+                                    width = ocrResult.origWidth,
+                                    height = ocrResult.origHeight,
                                     fromLang = effectiveFromLang,
                                     toLang = translation.toLang,
                                     engine = selectedEngine,
+                                    ocrScale = ocrResult.scaleFactor,
                                 )
                             if (pageTranslation.blocks.isNotEmpty()) pages[file.name!!] = pageTranslation
                             translation.progress = index + 1
@@ -624,6 +623,77 @@ class ChapterTranslator(
         }
     }
 
+    private data class OcrRecognitionResult(
+        val blocks: List<Text.TextBlock>,
+        val origWidth: Int,
+        val origHeight: Int,
+        val scaleFactor: Float,
+    )
+
+    private fun recognizeFileWithUpscaling(
+        file: File,
+        recognizer: TextRecognizer,
+    ): OcrRecognitionResult {
+        val boundsOptions = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        try {
+            BitmapFactory.decodeFile(file.absolutePath, boundsOptions)
+        } catch (e: Throwable) {
+            logcat(LogPriority.WARN, e) { "Failed to decode image bounds for OCR" }
+        }
+        val origWidth = boundsOptions.outWidth
+        val origHeight = boundsOptions.outHeight
+
+        if (origWidth in 1..1399 && origHeight in 1..4096) {
+            var rawBitmap: Bitmap? = null
+            var scaledBitmap: Bitmap? = null
+            try {
+                val decodeOptions = BitmapFactory.Options().apply {
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                }
+                rawBitmap = BitmapFactory.decodeFile(file.absolutePath, decodeOptions)
+                if (rawBitmap != null) {
+                    val targetWidth = origWidth * 2
+                    val targetHeight = origHeight * 2
+                    scaledBitmap = Bitmap.createScaledBitmap(rawBitmap, targetWidth, targetHeight, true)
+                    if (scaledBitmap !== rawBitmap) {
+                        rawBitmap.recycle()
+                        rawBitmap = null
+                    }
+                    val inputImage = InputImage.fromBitmap(scaledBitmap, 0)
+                    val result = recognizer.recognize(inputImage)
+                    val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
+                    return OcrRecognitionResult(
+                        blocks = blocks,
+                        origWidth = origWidth,
+                        origHeight = origHeight,
+                        scaleFactor = 2.0f,
+                    )
+                }
+            } catch (e: Throwable) {
+                logcat(LogPriority.WARN, e) { "Failed to upscale image for OCR, falling back to original file" }
+            } finally {
+                if (rawBitmap != null && !rawBitmap.isRecycled) {
+                    rawBitmap.recycle()
+                }
+                if (scaledBitmap != null && !scaledBitmap.isRecycled) {
+                    scaledBitmap.recycle()
+                }
+            }
+        }
+
+        val image = InputImage.fromFilePath(context, android.net.Uri.fromFile(file))
+        val result = recognizer.recognize(image)
+        val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
+        return OcrRecognitionResult(
+            blocks = blocks,
+            origWidth = image.width,
+            origHeight = image.height,
+            scaleFactor = 1.0f,
+        )
+    }
+
     private fun convertToPageTranslation(
         blocks: List<Text.TextBlock>,
         width: Int,
@@ -631,6 +701,7 @@ class ChapterTranslator(
         fromLang: TextRecognizerLanguage,
         toLang: TextTranslatorLanguage = TextTranslatorLanguage.ENGLISH,
         engine: TextTranslators? = null,
+        ocrScale: Float = 1.0f,
     ): PageTranslation {
         val translation = PageTranslation(
             imgWidth = width.toFloat(),
@@ -639,6 +710,7 @@ class ChapterTranslator(
             targetLanguage = toLang.toCloudApiCode(),
             translatorType = engine?.name?.lowercase() ?: "gemini",
         )
+        val safeScale = if (ocrScale > 0f) ocrScale else 1.0f
         for (block in blocks) {
             val bounds = block.boundingBox ?: continue
             val cleanText = ComicTextPreprocessor.preprocessOcrBlockText(block.text)
@@ -649,8 +721,8 @@ class ChapterTranslator(
             val firstSymbol = firstElement?.symbols?.firstOrNull()
             val symBounds = firstSymbol?.boundingBox ?: firstElement?.boundingBox
             val lineCount = maxOf(1, block.lines.size)
-            val rawSymWidth = symBounds?.width()?.toFloat() ?: (bounds.width().toFloat() / maxOf(1, cleanText.length))
-            val rawSymHeight = symBounds?.height()?.toFloat() ?: (bounds.height().toFloat() / lineCount)
+            val rawSymWidth = (symBounds?.width()?.toFloat() ?: (bounds.width().toFloat() / maxOf(1, cleanText.length))) / safeScale
+            val rawSymHeight = (symBounds?.height()?.toFloat() ?: (bounds.height().toFloat() / lineCount)) / safeScale
             val symWidth = rawSymWidth.coerceIn(8f, 36f)
             val symHeight = rawSymHeight.coerceIn(12f, 48f)
             val angle = firstLine?.angle ?: 0f
@@ -658,13 +730,13 @@ class ChapterTranslator(
             translation.blocks.add(
                 TranslationBlock(
                     text = cleanText,
-                    width = bounds.width().toFloat(),
-                    height = bounds.height().toFloat(),
+                    width = bounds.width().toFloat() / safeScale,
+                    height = bounds.height().toFloat() / safeScale,
                     symWidth = symWidth,
                     symHeight = symHeight,
                     angle = angle,
-                    x = bounds.left.toFloat(),
-                    y = bounds.top.toFloat(),
+                    x = bounds.left.toFloat() / safeScale,
+                    y = bounds.top.toFloat() / safeScale,
                 ),
             )
         }
