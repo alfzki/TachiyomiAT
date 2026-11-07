@@ -4,6 +4,7 @@ import com.google.mlkit.nl.translate.TranslateLanguage
 import tachiyomi.core.common.preference.Preference
 
 enum class TextRecognizerLanguage(var code: String, val label: String) {
+    AUTO("", "Auto Detect"),
     CHINESE(TranslateLanguage.CHINESE, "Chinese (trad/sim)"),
     JAPANESE(TranslateLanguage.JAPANESE, "Japanese"),
     KOREAN(TranslateLanguage.KOREAN, "Korean"),
@@ -15,8 +16,8 @@ enum class TextRecognizerLanguage(var code: String, val label: String) {
             val name = pref.get()
             var lang = entries.firstOrNull { it.name.equals(name, true) }
             if (lang == null) {
-                pref.set(CHINESE.name)
-                return CHINESE
+                pref.set(AUTO.name)
+                return AUTO
             }
             return lang
         }
