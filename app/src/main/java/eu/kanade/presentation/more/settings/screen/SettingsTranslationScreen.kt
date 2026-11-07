@@ -7,6 +7,7 @@ import androidx.compose.ui.platform.LocalContext
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.translation.data.TranslationFont
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
+import eu.kanade.translation.translator.AICoreModelVariant
 import eu.kanade.translation.translator.TextTranslatorLanguage
 import eu.kanade.translation.translator.TextTranslators
 import kotlinx.collections.immutable.persistentListOf
@@ -82,6 +83,13 @@ object SettingsTranslationScreen : SearchableSettings {
                     preference = translationPreferences.translationEngineApiKey,
                     subtitle = stringResource(ATMR.strings.pref_sub_engine_api_key),
                     title = stringResource(ATMR.strings.pref_engine_api_key),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = translationPreferences.aicoreModelVariant,
+                    title = stringResource(ATMR.strings.pref_aicore_model_variant),
+                    entries = AICoreModelVariant.entries.withIndex().associate {
+                        it.index to it.value.label
+                    }.toImmutableMap(),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = translationPreferences.aicoreUsePageImageContext,

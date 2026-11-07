@@ -17,6 +17,7 @@ import eu.kanade.translation.model.TranslationBlock
 import eu.kanade.translation.model.TranslationContext
 import eu.kanade.translation.recognizer.TextRecognizer
 import eu.kanade.translation.recognizer.TextRecognizerLanguage
+import eu.kanade.translation.translator.AICoreModelVariant
 import eu.kanade.translation.translator.AICoreTranslator
 import eu.kanade.translation.translator.AICoreUnavailableException
 import eu.kanade.translation.translator.TextTranslator
@@ -238,9 +239,16 @@ class ChapterTranslator(
             }
             // Check if translator reinitialization is needed
             val selectedEngine = TextTranslators.fromPref(translationPreferences.translationEngine())
+            val currentAICoreTranslator = textTranslator as? AICoreTranslator
+            val aicoreParamsChanged = currentAICoreTranslator != null && (
+                currentAICoreTranslator.modelVariant !=
+                    AICoreModelVariant.fromPref(translationPreferences.aicoreModelVariant().get()) ||
+                    currentAICoreTranslator.useImageContext != translationPreferences.aicoreUsePageImageContext().get()
+                )
             if (translation.fromLang != textTranslator.fromLang ||
                 translation.toLang != textTranslator.toLang ||
-                selectedEngine != currentEngine
+                selectedEngine != currentEngine ||
+                aicoreParamsChanged
             ) {
                 withContext(Dispatchers.IO) {
                     textTranslator.close()

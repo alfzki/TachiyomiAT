@@ -7,9 +7,13 @@ import com.google.mlkit.genai.prompt.Feature
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerativeModel
 import com.google.mlkit.genai.prompt.ImagePart
+import com.google.mlkit.genai.prompt.ModelPreference
+import com.google.mlkit.genai.prompt.ModelReleaseStage
 import com.google.mlkit.genai.prompt.SystemInstruction
 import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.generateContentRequest
+import com.google.mlkit.genai.prompt.generationConfig
+import com.google.mlkit.genai.prompt.modelConfig
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
 import eu.kanade.translation.model.PageTranslation
 import eu.kanade.translation.model.TranslationBlock
@@ -27,6 +31,34 @@ import org.json.JSONArray
 import tachiyomi.core.common.util.system.logcat
 import kotlin.math.abs
 
+enum class AICoreModelVariant(
+    val label: String,
+    val releaseStage: Int,
+    val preference: Int,
+) {
+    DEFAULT_STABLE(
+        label = "Default (Gemini Nano Stable)",
+        releaseStage = ModelReleaseStage.STABLE,
+        preference = ModelPreference.FULL,
+    ),
+    GEMMA_4_E2B(
+        label = "Gemma 4 E2B (Fast NPU)",
+        releaseStage = ModelReleaseStage.PREVIEW,
+        preference = ModelPreference.FAST,
+    ),
+    GEMMA_4_E4B(
+        label = "Gemma 4 E4B (Full NPU)",
+        releaseStage = ModelReleaseStage.PREVIEW,
+        preference = ModelPreference.FULL,
+    ),
+    ;
+
+    companion object {
+        fun fromPref(index: Int): AICoreModelVariant =
+            entries.getOrElse(index) { DEFAULT_STABLE }
+    }
+}
+
 class AICoreUnavailableException(
     message: String = "AICore is unavailable on this device",
     cause: Throwable? = null,
@@ -37,7 +69,8 @@ class AICoreTranslator(
     override val toLang: TextTranslatorLanguage,
     maxOutputTokens: Int,
     temperature: Float,
-    private val useImageContext: Boolean = false,
+    val useImageContext: Boolean = false,
+    val modelVariant: AICoreModelVariant = AICoreModelVariant.GEMMA_4_E4B,
 ) : TextTranslator {
 
     private val clampedMaxOutputTokens = maxOutputTokens.coerceIn(128, 1024)
@@ -203,30 +236,68 @@ class AICoreTranslator(
         return result
     }
 
+    private fun createClient(variant: AICoreModelVariant): GenerativeModel {
+        return if (variant == AICoreModelVariant.DEFAULT_STABLE) {
+            Generation.getClient()
+        } else {
+            val config = generationConfig {
+                modelConfig = modelConfig {
+                    releaseStage = variant.releaseStage
+                    preference = variant.preference
+                }
+            }
+            Generation.getClient(config)
+        }
+    }
+
     private suspend fun getOrInitModel(): GenerativeModel {
         val existing = model
         if (existing != null) return existing
 
-        logcat(LogPriority.INFO) { "AICore: getOrInitModel - calling Generation.getClient()" }
-        val generativeModel = try {
-            Generation.getClient()
+        logcat(LogPriority.INFO) {
+            "AICore: getOrInitModel - variant=${modelVariant.name}, releaseStage=${modelVariant.releaseStage}, preference=${modelVariant.preference}"
+        }
+
+        var generativeModel = try {
+            createClient(modelVariant)
         } catch (t: Throwable) {
-            logcat(LogPriority.ERROR, t) { "AICore: Generation.getClient() failed" }
+            logcat(LogPriority.ERROR, t) { "AICore: createClient($modelVariant) failed" }
             throw AICoreUnavailableException("Failed to initialize AICore client", t)
         }
 
-        logcat(LogPriority.INFO) { "AICore: getOrInitModel - calling checkStatus()" }
-        val status = try {
+        var status = try {
             generativeModel.checkStatus()
         } catch (t: Throwable) {
-            logcat(LogPriority.ERROR, t) { "AICore: checkStatus() failed" }
+            logcat(LogPriority.ERROR, t) { "AICore: checkStatus() failed for $modelVariant" }
             throw AICoreUnavailableException("Failed to check AICore status", t)
         }
-        logcat(LogPriority.INFO) { "AICore: getOrInitModel - status = $status" }
+        logcat(LogPriority.INFO) { "AICore: getOrInitModel - status for $modelVariant = $status" }
+
+        // Fallback to default stable if requested variant is UNAVAILABLE
+        if (status == FeatureStatus.UNAVAILABLE && modelVariant != AICoreModelVariant.DEFAULT_STABLE) {
+            logcat(LogPriority.WARN) {
+                "AICore: $modelVariant is UNAVAILABLE on this device, falling back to DEFAULT_STABLE..."
+            }
+            runCatching { generativeModel.close() }
+            generativeModel = try {
+                createClient(AICoreModelVariant.DEFAULT_STABLE)
+            } catch (t: Throwable) {
+                logcat(LogPriority.ERROR, t) { "AICore: fallback to DEFAULT_STABLE failed" }
+                throw AICoreUnavailableException("Failed to initialize fallback AICore client", t)
+            }
+            status = try {
+                generativeModel.checkStatus()
+            } catch (t: Throwable) {
+                logcat(LogPriority.ERROR, t) { "AICore: checkStatus() failed for DEFAULT_STABLE" }
+                throw AICoreUnavailableException("Failed to check fallback AICore status", t)
+            }
+            logcat(LogPriority.INFO) { "AICore: getOrInitModel - status for DEFAULT_STABLE = $status" }
+        }
 
         if (status == FeatureStatus.UNAVAILABLE) {
             throw AICoreUnavailableException()
         }
+
         if (status == FeatureStatus.DOWNLOADABLE || status == FeatureStatus.DOWNLOADING) {
             logcat(LogPriority.INFO) { "AICore: getOrInitModel - downloading model..." }
             try {
@@ -251,6 +322,9 @@ class AICoreTranslator(
         } catch (t: Throwable) {
             logcat(LogPriority.WARN, t) { "AICore: warmup() threw exception, continuing without warmup" }
         }
+
+        val baseModelName = runCatching { generativeModel.getBaseModelName() }.getOrNull()
+        logcat(LogPriority.INFO) { "AICore: active base model name = $baseModelName" }
 
         model = generativeModel
         return generativeModel

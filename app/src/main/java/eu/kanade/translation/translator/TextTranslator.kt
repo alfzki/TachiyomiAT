@@ -45,6 +45,7 @@ enum class TextTranslators(val label: String) {
                 maxOutputTokens,
                 temperature,
                 pref.aicoreUsePageImageContext().get(),
+                AICoreModelVariant.fromPref(pref.aicoreModelVariant().get()),
             )
         }
     }

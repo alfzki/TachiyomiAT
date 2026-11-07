@@ -41,6 +41,9 @@ class TranslationPreferences(
     val aicoreUsePageImageContext: Preference<Boolean> =
         preferenceStore.getBoolean("aicore_use_page_image_context", false)
 
+    val aicoreModelVariant: Preference<Int> =
+        preferenceStore.getInt("aicore_model_variant", 2)
+
     fun autoTranslateAfterDownload() = autoTranslateAfterDownload
     fun translateFromLanguage() = translateFromLanguage
     fun translateToLanguage() = translateToLanguage
@@ -51,4 +54,5 @@ class TranslationPreferences(
     fun translationEngineTemperature() = translationEngineTemperature
     fun translationEngineMaxOutputTokens() = translationEngineMaxOutputTokens
     fun aicoreUsePageImageContext() = aicoreUsePageImageContext
+    fun aicoreModelVariant() = aicoreModelVariant
 }

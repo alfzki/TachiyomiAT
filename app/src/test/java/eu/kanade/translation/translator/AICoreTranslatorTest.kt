@@ -265,4 +265,13 @@ class AICoreTranslatorTest {
         assertEquals(90f, merged[0].width)
         assertEquals(70f, merged[0].height)
     }
+
+    @Test
+    fun `AICoreModelVariant fromPref maps correct variant and defaults safely`() {
+        assertEquals(AICoreModelVariant.DEFAULT_STABLE, AICoreModelVariant.fromPref(0))
+        assertEquals(AICoreModelVariant.GEMMA_4_E2B, AICoreModelVariant.fromPref(1))
+        assertEquals(AICoreModelVariant.GEMMA_4_E4B, AICoreModelVariant.fromPref(2))
+        assertEquals(AICoreModelVariant.DEFAULT_STABLE, AICoreModelVariant.fromPref(-1))
+        assertEquals(AICoreModelVariant.DEFAULT_STABLE, AICoreModelVariant.fromPref(99))
+    }
 }
