@@ -156,6 +156,7 @@ android {
                 "META-INF/LICENSE",
                 "META-INF/NOTICE",
                 "META-INF/README.md",
+                "META-INF/INDEX.LIST",
             )
         }
     }
@@ -341,6 +342,9 @@ dependencies {
     implementation(libs.mlkit.text.translate)
     implementation(libs.mlkit.genai.prompt)
     implementation(libs.google.generativeai)
+    implementation(libs.google.cloud.translate) {
+        exclude(group = "org.conscrypt", module = "conscrypt-openjdk-uber")
+    }
 }
 
 apollo {

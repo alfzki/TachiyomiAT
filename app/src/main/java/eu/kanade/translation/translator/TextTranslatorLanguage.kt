@@ -192,6 +192,12 @@ enum class TextTranslatorLanguage(val code: String, val label: String) {
     ZULU("zu", "Zulu"),
     ;
 
+    /**
+     * Convert to ISO 639-1 code for Google Cloud Translation API
+     * Target language already uses ISO 639-1 codes, so just return the code
+     */
+    fun toCloudApiCode(): String = code
+
     companion object {
 
         fun mlkitSupportedLanguages(): List<TextTranslatorLanguage> {

@@ -81,6 +81,7 @@ mlkit-text-recognition-version = "16.0.1"
 mlkit-text-translate-version = "17.0.3"
 mlkit-genai-prompt-version = "1.0.0-beta5"
 google-generativeai-version = "0.9.0"
+google-cloud-translate-version = "2.56.0"
 
 [libraries]
 mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkit-text-recognition-version" }
@@ -90,6 +91,7 @@ mlkit-text-recognition-korean = { module = "com.google.mlkit:text-recognition-ko
 mlkit-text-translate = { module = "com.google.mlkit:translate", version.ref = "mlkit-text-translate-version" }
 mlkit-genai-prompt = { module = "com.google.mlkit:genai-prompt", version.ref = "mlkit-genai-prompt-version" }
 google-generativeai = { module = "com.google.ai.client.generativeai:generativeai", version.ref = "google-generativeai-version" }
+google-cloud-translate = { module = "com.google.cloud:google-cloud-translate", version.ref = "google-cloud-translate-version" }
 
 aboutLibraries-compose = { module = "com.mikepenz:aboutlibraries-compose-m3", version.ref = "aboutLibraries" }
 android-desugar = { module = "com.android.tools:desugar_jdk_libs", version.ref = "android-desugar" }

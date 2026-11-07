@@ -20,6 +20,7 @@ interface TextTranslator : Closeable {
 enum class TextTranslators(val label: String) {
     MLKIT("MlKit (On Device)"),
     GOOGLE("Google Translate"),
+    GOOGLE_CLOUD("Google Cloud Translation [API KEY]"),
     GEMINI("Gemini AI [API KEY]"),
     OPENROUTER("OpenRouter [API KEY]"),
     AICORE("AICore (On Device NPU)"),
@@ -34,9 +35,11 @@ enum class TextTranslators(val label: String) {
         val temperature = pref.translationEngineTemperature().get().toFloatOrNull() ?: 1.0f
         val modelName = pref.translationEngineModel().get()
         val apiKey = pref.translationEngineApiKey().get()
+        val detectionMethod = pref.translationLanguageDetectionMethod().get()
         return when (this) {
             MLKIT -> MLKitTranslator(fromLang, toLang)
             GOOGLE -> GoogleTranslator(fromLang, toLang)
+            GOOGLE_CLOUD -> CloudTranslator(fromLang, toLang, apiKey, detectionMethod)
             GEMINI -> GeminiTranslator(fromLang, toLang, apiKey, modelName, maxOutputTokens, temperature)
             OPENROUTER -> OpenRouterTranslator(fromLang, toLang, apiKey, modelName, maxOutputTokens, temperature)
             AICORE -> AICoreTranslator(

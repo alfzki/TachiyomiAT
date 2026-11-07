@@ -31,7 +31,7 @@ class TranslationPreferences(
         preferenceStore.getInt("translation_engine", 0)
 
     val translationEngineModel: Preference<String> =
-        preferenceStore.getString("translation_engine_model", "gemini-1.5-pro")
+        preferenceStore.getString("translation_engine_model", "gemini-3.5-flash-lite")
 
     val translationEngineApiKey: Preference<String> =
         preferenceStore.getString("translation_engine_api_key", "")

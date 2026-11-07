@@ -598,8 +598,9 @@ class ChapterTranslator(
                 ),
             )
         }
-        // Smart merge overlapping text blocks
-        val mergedBlocks = smartMergeBlocks(translation.blocks, 50, 30, 30)
+        // Smart merge overlapping text blocks with language-specific thresholds
+        val (widthThresh, xThresh, yThresh) = getLanguageSpecificMergeThresholds(fromLang)
+        val mergedBlocks = smartMergeBlocks(translation.blocks, widthThresh, xThresh, yThresh)
         val cleanedBlocks = mergedBlocks.mapNotNull { block ->
             val cleaned = ComicTextPreprocessor.preprocessOcrBlockText(block.text)
             if (ComicTextPreprocessor.isLikelyOcrNoiseOrWatermark(cleaned)) {
@@ -675,6 +676,24 @@ class ChapterTranslator(
     }
 
     companion object {
+        /**
+         * Get language-specific text merging thresholds.
+         * Korean text has different spacing patterns than Japanese/Chinese.
+         * Returns (widthThreshold, xThreshold, yThreshold)
+         */
+        internal fun getLanguageSpecificMergeThresholds(language: TextRecognizerLanguage): Triple<Int, Int, Int> {
+            return when (language) {
+                // Korean needs larger thresholds due to spacing differences in Hangul
+                TextRecognizerLanguage.KOREAN -> Triple(60, 35, 40)
+                // Japanese with mixed Kanji/Hiragana
+                TextRecognizerLanguage.JAPANESE -> Triple(50, 30, 30)
+                // Chinese characters are more uniform
+                TextRecognizerLanguage.CHINESE -> Triple(45, 25, 28)
+                // Default for other languages
+                else -> Triple(50, 30, 30)
+            }
+        }
+
         internal fun smartMergeBlocks(
             blocks: List<TranslationBlock>,
             widthThreshold: Int,

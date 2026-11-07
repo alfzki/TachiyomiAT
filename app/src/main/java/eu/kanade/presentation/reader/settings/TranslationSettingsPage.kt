@@ -13,11 +13,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsViewModel
-import kotlin.math.roundToInt
 import tachiyomi.domain.translation.model.ProfileType
 import tachiyomi.i18n.at.ATMR
 import tachiyomi.presentation.core.components.SliderItem
 import tachiyomi.presentation.core.i18n.stringResource
+import kotlin.math.roundToInt
 import tachiyomi.presentation.core.util.collectAsState as collectAsStatePref
 
 /**
@@ -97,7 +97,7 @@ private fun ColumnScope.CJKProfileSettings(viewModel: ReaderSettingsViewModel) {
         value = paddingMultInt,
         valueRange = 100..150,
         label = stringResource(ATMR.strings.pref_translation_padding),
-        valueString = "${paddingMultInt}%",
+        valueString = "$paddingMultInt%",
         onChange = { paddingMultPref.set(it / 100f) },
     )
 
@@ -105,7 +105,7 @@ private fun ColumnScope.CJKProfileSettings(viewModel: ReaderSettingsViewModel) {
         value = ovalHeightInt,
         valueRange = 50..95,
         label = stringResource(ATMR.strings.pref_translation_oval_height),
-        valueString = "${ovalHeightInt}%",
+        valueString = "$ovalHeightInt%",
         onChange = { ovalHeightPref.set(it / 100f) },
     )
 
@@ -161,7 +161,7 @@ private fun ColumnScope.LatinProfileSettings(viewModel: ReaderSettingsViewModel)
         value = paddingMultInt,
         valueRange = 100..150,
         label = stringResource(ATMR.strings.pref_translation_padding),
-        valueString = "${paddingMultInt}%",
+        valueString = "$paddingMultInt%",
         onChange = { paddingMultPref.set(it / 100f) },
     )
 
@@ -169,7 +169,7 @@ private fun ColumnScope.LatinProfileSettings(viewModel: ReaderSettingsViewModel)
         value = ovalHeightInt,
         valueRange = 70..99,
         label = stringResource(ATMR.strings.pref_translation_oval_height),
-        valueString = "${ovalHeightInt}%",
+        valueString = "$ovalHeightInt%",
         onChange = { ovalHeightPref.set(it / 100f) },
     )
 

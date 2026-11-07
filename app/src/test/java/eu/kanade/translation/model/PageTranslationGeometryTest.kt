@@ -172,7 +172,11 @@ class PageTranslationGeometryTest {
 
     @Test
     fun `serialization preserves backwards compatibility with existing JSON`() {
-        val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
+        val json = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            encodeDefaults = true
+        }
 
         // Test decoding old JSON without new fields
         val legacyJson = """{"blocks":[],"imgWidth":800.0,"imgHeight":1200.0}"""

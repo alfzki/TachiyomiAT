@@ -8,7 +8,8 @@ package tachiyomi.domain.translation.model
  */
 enum class ProfileType {
     CJK,
-    LATIN;
+    LATIN,
+    ;
 
     companion object {
         /**
@@ -17,7 +18,8 @@ enum class ProfileType {
         fun fromSourceLanguage(sourceLanguage: String): ProfileType = when (sourceLanguage.lowercase()) {
             "ko", "korean", "kor",
             "ja", "japanese", "jpn",
-            "zh", "chinese", "zho", "zh-cn", "zh-tw", "zh-hant", "zh-hans" -> CJK
+            "zh", "chinese", "zho", "zh-cn", "zh-tw", "zh-hant", "zh-hans",
+            -> CJK
             else -> LATIN
         }
     }
