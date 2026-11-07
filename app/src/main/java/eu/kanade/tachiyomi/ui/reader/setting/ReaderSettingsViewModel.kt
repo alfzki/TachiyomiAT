@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.ui.reader.setting
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eu.kanade.tachiyomi.ui.reader.ReaderViewModel
@@ -9,18 +8,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import mihon.app.di.appGraph
 import tachiyomi.domain.translation.TranslationPreferences
 import tachiyomi.domain.translation.model.ProfileType
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 
 class ReaderSettingsViewModel(
     readerState: StateFlow<ReaderViewModel.State>,
     val onChangeReadingMode: (ReadingMode) -> Unit,
     val onChangeOrientation: (ReaderOrientation) -> Unit,
     val preferences: ReaderPreferences,
-    val translationPreferences: TranslationPreferences = Injekt.get<Context>().appGraph.translationPreferences,
+    val translationPreferences: TranslationPreferences,
 ) : ViewModel() {
 
     val viewerFlow = readerState

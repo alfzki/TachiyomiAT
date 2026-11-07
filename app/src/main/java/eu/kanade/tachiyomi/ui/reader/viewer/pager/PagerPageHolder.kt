@@ -47,6 +47,7 @@ class PagerPageHolder(
 ) : ReaderPageImageView(readerThemedContext), ViewPagerAdapter.PositionableView {
 
     private val translationPreferences = readerThemedContext.appGraph.translationPreferences
+    private val translationManager = readerThemedContext.appGraph.translationManager
     private val font = TranslationFont.fromPref(translationPreferences.translationFont)
     private val readerPreferences = readerThemedContext.appGraph.readerPreferences
 
@@ -309,9 +310,34 @@ class PagerPageHolder(
     }
 
     private fun addTranslationsView() {
-        if (page.translation == null) return
+        val translation = page.translation ?: return
         removeView(translationsView)
-        translationsView = PagerTranslationsView(context, translation = page.translation!!, font = font)
+        translationsView = PagerTranslationsView(context, translation = translation, font = font).apply {
+            onBlockDelete = { blockIndex ->
+                val manga = viewer.activity.viewModel.manga
+                val source = viewer.activity.viewModel.source
+                if (manga != null && source != null) {
+                    val chapter = page.chapter.chapter
+                    val fileName = page.pageFileName ?: page.index.toString()
+
+                    scope.launch {
+                        val deleted = withContext(Dispatchers.IO) {
+                            translationManager.deleteTranslationBlock(
+                                chapter = chapter,
+                                manga = manga,
+                                source = source,
+                                pageFileName = fileName,
+                                blockIndex = blockIndex,
+                            )
+                        }
+                        if (deleted) {
+                            page.translation?.deleteBlock(blockIndex)
+                            addTranslationsView()
+                        }
+                    }
+                }
+            }
+        }
         if (!showTranslations) translationsView?.hide()
         addView(translationsView, MATCH_PARENT, MATCH_PARENT)
         (pageView as? SubsamplingScaleImageView)?.let { vi ->

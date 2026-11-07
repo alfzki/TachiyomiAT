@@ -7,6 +7,7 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.source.Source
+import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
 import eu.kanade.translation.data.TranslationProvider
 import eu.kanade.translation.model.PageTranslation
 import eu.kanade.translation.model.Translation
@@ -28,6 +29,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
+import kotlinx.serialization.json.encodeToStream
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
@@ -53,13 +57,15 @@ class TranslationManager(
         _changes.trySend(Unit)
     }
 
-    private val translator = ChapterTranslator(
-        context = context,
-        provider = provider,
-        downloadProvider = downloadProvider,
-        sourceManager = sourceManager,
-        translationPreferences = translationPreferences,
-    )
+    private val translator by lazy {
+        ChapterTranslator(
+            context = context,
+            provider = provider,
+            downloadProvider = downloadProvider,
+            sourceManager = sourceManager,
+            translationPreferences = translationPreferences,
+        )
+    }
 
     val isRunning: Boolean
         get() = translator.isRunning
@@ -168,6 +174,62 @@ class TranslationManager(
             file.delete()
         }
         return emptyMap()
+    }
+
+    fun getTranslationFile(
+        chapter: Chapter,
+        manga: Manga,
+        source: Source,
+        @Suppress("UNUSED_PARAMETER") pageFileName: String? = null,
+    ): UniFile? {
+        return provider.findTranslationFile(
+            chapterName = chapter.name,
+            chapterScanlator = chapter.scanlator,
+            mangaTitle = manga.title,
+            source = source,
+        )
+    }
+
+    fun deleteTranslationBlock(
+        chapter: Chapter,
+        manga: Manga,
+        source: Source,
+        pageFileName: String,
+        blockIndex: Int,
+    ): Boolean {
+        try {
+            val file = getTranslationFile(chapter, manga, source, pageFileName) ?: return false
+            val pages = Json.decodeFromStream<Map<String, PageTranslation>>(file.openInputStream()).toMutableMap()
+            val key = if (pageFileName.isNotBlank() && pages.containsKey(pageFileName)) {
+                pageFileName
+            } else if (pageFileName.isNotBlank()) {
+                pages.keys.firstOrNull { it.equals(pageFileName, ignoreCase = true) }
+                    ?: pages.keys.firstOrNull { it.contains(pageFileName, ignoreCase = true) }
+                    ?: (
+                        pageFileName.toIntOrNull()?.let { idx ->
+                            pages.keys.sortedWith { a, b -> a.compareToCaseInsensitiveNaturalOrder(b) }.getOrNull(idx)
+                        }
+                        )
+            } else {
+                null
+            } ?: return false
+
+            val pageTranslation = pages[key] ?: return false
+            val deleted = pageTranslation.deleteBlock(blockIndex)
+            if (!deleted) return false
+
+            pages[key] = pageTranslation
+            file.openOutputStream().use { outStream ->
+                Json.encodeToStream(pages, outStream)
+            }
+            invalidate()
+            return true
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) {
+                "Failed to delete translation block at index $blockIndex for page $pageFileName"
+            }
+            return false
+        }
     }
 
     fun deleteTranslation(chapter: Chapter, manga: Manga, source: Source) {

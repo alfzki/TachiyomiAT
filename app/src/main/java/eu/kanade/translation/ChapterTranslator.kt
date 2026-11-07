@@ -320,7 +320,14 @@ class ChapterTranslator(
                                 val result = textRecognizer.recognize(image)
                                 val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
                                 val pageTranslation =
-                                    convertToPageTranslation(blocks, image.width, image.height, effectiveFromLang)
+                                    convertToPageTranslation(
+                                        blocks = blocks,
+                                        width = image.width,
+                                        height = image.height,
+                                        fromLang = effectiveFromLang,
+                                        toLang = translation.toLang,
+                                        engine = selectedEngine,
+                                    )
                                 if (pageTranslation.blocks.isNotEmpty()) pages[entryName] = pageTranslation
                             }
 
@@ -352,7 +359,14 @@ class ChapterTranslator(
                             val result = textRecognizer.recognize(image)
                             val blocks = result.textBlocks.filter { it.boundingBox != null && it.text.length > 1 }
                             val pageTranslation =
-                                convertToPageTranslation(blocks, image.width, image.height, effectiveFromLang)
+                                convertToPageTranslation(
+                                    blocks = blocks,
+                                    width = image.width,
+                                    height = image.height,
+                                    fromLang = effectiveFromLang,
+                                    toLang = translation.toLang,
+                                    engine = selectedEngine,
+                                )
                             if (pageTranslation.blocks.isNotEmpty()) pages[file.name!!] = pageTranslation
                         }
 
@@ -570,8 +584,16 @@ class ChapterTranslator(
         width: Int,
         height: Int,
         fromLang: TextRecognizerLanguage,
+        toLang: TextTranslatorLanguage = TextTranslatorLanguage.ENGLISH,
+        engine: TextTranslators? = null,
     ): PageTranslation {
-        val translation = PageTranslation(imgWidth = width.toFloat(), imgHeight = height.toFloat())
+        val translation = PageTranslation(
+            imgWidth = width.toFloat(),
+            imgHeight = height.toFloat(),
+            sourceLanguage = fromLang.toCloudApiCode(),
+            targetLanguage = toLang.toCloudApiCode(),
+            translatorType = engine?.name?.lowercase() ?: "gemini",
+        )
         for (block in blocks) {
             val bounds = block.boundingBox ?: continue
             val cleanText = ComicTextPreprocessor.preprocessOcrBlockText(block.text)

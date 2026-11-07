@@ -100,6 +100,7 @@ import tachiyomi.core.common.Constants
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.translation.TranslationPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.util.collectAsState
 import java.io.ByteArrayOutputStream
@@ -120,6 +121,8 @@ class ReaderActivity : BaseActivity() {
     }
 
     @Inject private lateinit var readerPreferences: ReaderPreferences
+
+    @Inject private lateinit var translationPreferences: TranslationPreferences
 
     @Inject private lateinit var preferences: BasePreferences
 
@@ -258,6 +261,7 @@ class ReaderActivity : BaseActivity() {
                 onChangeReadingMode = viewModel::setMangaReadingMode,
                 onChangeOrientation = viewModel::setMangaOrientationType,
                 preferences = readerPreferences,
+                translationPreferences = translationPreferences,
             )
         }
 

@@ -13,4 +13,5 @@ open class ReaderPage(
 ) : Page(index, url, imageUrl, null) {
 
     open lateinit var chapter: ReaderChapter
+    var pageFileName: String? = null
 }

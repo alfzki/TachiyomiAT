@@ -59,4 +59,47 @@ class TranslationSerializationTest {
         assertTrue(mlkitLangs.any { it.code == "ja" })
         assertTrue(mlkitLangs.any { it.code == "zh" })
     }
+
+    @Test
+    fun `deleteBlock removes target block and serializes correctly`() {
+        val block1 = TranslationBlock("First", "Pertama", 100f, 50f, 10f, 10f, 8f, 12f, 0f)
+        val block2 = TranslationBlock("Second", "Kedua", 120f, 60f, 20f, 70f, 8f, 12f, 0f)
+        val page = PageTranslation(
+            imgWidth = 1000f,
+            imgHeight = 1500f,
+            sourceLanguage = "ko",
+            targetLanguage = "id",
+            blocks = mutableListOf(block1, block2),
+        )
+
+        assertEquals(2, page.blocks.size)
+        val deleted = page.deleteBlock(0)
+        assertTrue(deleted)
+        assertEquals(1, page.blocks.size)
+        assertEquals("Second", page.blocks[0].text)
+
+        val map = mapOf("001.jpg" to page)
+        val jsonStr = Json.encodeToString(map)
+        val decoded = Json.decodeFromString<Map<String, PageTranslation>>(jsonStr)
+
+        assertEquals("ko", decoded["001.jpg"]!!.sourceLanguage)
+        assertEquals("id", decoded["001.jpg"]!!.targetLanguage)
+        assertEquals(1, decoded["001.jpg"]!!.blocks.size)
+        assertEquals("Second", decoded["001.jpg"]!!.blocks[0].text)
+    }
+
+    @Test
+    fun `PageTranslation language codes derive expected ProfileType`() {
+        val pageKorean = PageTranslation(sourceLanguage = "ko", targetLanguage = "en")
+        assertEquals(tachiyomi.domain.translation.model.ProfileType.CJK, pageKorean.profileType)
+
+        val pageJapanese = PageTranslation(sourceLanguage = "ja", targetLanguage = "en")
+        assertEquals(tachiyomi.domain.translation.model.ProfileType.CJK, pageJapanese.profileType)
+
+        val pageChinese = PageTranslation(sourceLanguage = "zh", targetLanguage = "en")
+        assertEquals(tachiyomi.domain.translation.model.ProfileType.CJK, pageChinese.profileType)
+
+        val pageEnglish = PageTranslation(sourceLanguage = "en", targetLanguage = "id")
+        assertEquals(tachiyomi.domain.translation.model.ProfileType.LATIN, pageEnglish.profileType)
+    }
 }

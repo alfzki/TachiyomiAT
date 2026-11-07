@@ -50,6 +50,7 @@ class WebtoonPageHolder(
 ) : WebtoonBaseHolder(frame, viewer) {
 
     private val translationPreferences = context.appGraph.translationPreferences
+    private val translationManager = context.appGraph.translationManager
     private val font = TranslationFont.fromPref(translationPreferences.translationFont)
     private val readerPreferences = context.appGraph.readerPreferences
 
@@ -288,9 +289,35 @@ class WebtoonPageHolder(
     }
 
     private fun addTranslationsView() {
-        if (page?.translation == null) return
+        val translation = page?.translation ?: return
         frame.removeView(translationsView)
-        translationsView = WebtoonTranslationsView(context, translation = page!!.translation!!, font = font)
+        translationsView = WebtoonTranslationsView(context, translation = translation, font = font).apply {
+            onBlockDelete = { blockIndex ->
+                val manga = viewer.activity.viewModel.manga
+                val source = viewer.activity.viewModel.source
+                val readerPage = page
+                if (manga != null && source != null && readerPage != null) {
+                    val chapter = readerPage.chapter.chapter
+                    val fileName = readerPage.pageFileName ?: readerPage.index.toString()
+
+                    scope.launch {
+                        val deleted = withContext(Dispatchers.IO) {
+                            translationManager.deleteTranslationBlock(
+                                chapter = chapter,
+                                manga = manga,
+                                source = source,
+                                pageFileName = fileName,
+                                blockIndex = blockIndex,
+                            )
+                        }
+                        if (deleted) {
+                            readerPage.translation?.deleteBlock(blockIndex)
+                            addTranslationsView()
+                        }
+                    }
+                }
+            }
+        }
         if (!showTranslations) translationsView?.hide()
         frame.addView(translationsView, MATCH_PARENT, MATCH_PARENT)
     }
