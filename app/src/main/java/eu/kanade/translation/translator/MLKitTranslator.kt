@@ -26,60 +26,17 @@ class MLKitTranslator(
         Tasks.await(translator.downloadModelIfNeeded(conditions))
 
         for ((_, page) in pages) {
-            val blocks = page.blocks
-            var i = 0
-            while (i < blocks.size) {
-                val current = blocks[i]
-                val currentTrimmed = current.text.trim()
-
-                // Check if current block ends without terminal punctuation and can be paired with next block
-                val canPair = i + 1 < blocks.size &&
-                    currentTrimmed.isNotEmpty() &&
-                    !ComicTextPreprocessor.isTerminalPunctuation(currentTrimmed.lastOrNull())
-
-                var paired = false
-                if (canPair) {
-                    val next = blocks[i + 1]
-                    val verticalGap = next.y - (current.y + current.height)
-                    if (verticalGap >= -50f && verticalGap < 350f) {
-                        paired = true
-                        val delimiter = " -- "
-                        val textA = ComicTextPreprocessor.preprocessOcrBlockText(current.text)
-                        val textB = ComicTextPreprocessor.preprocessOcrBlockText(next.text)
-                        val combined = "$textA$delimiter$textB"
-                        val prepared = ComicTextPreprocessor.prepareForNmt(combined, fromLang)
-
-                        val rawTranslated = Tasks.await(translator.translate(prepared))
-                        val postProcessed = ComicTextPreprocessor.postProcessNmtOutput(
-                            sourceText = combined,
-                            translatedText = rawTranslated,
-                            toLang = toLang,
-                        )
-
-                        val (transA, transB) = ComicTextPreprocessor.splitJoinedTranslation(
-                            joinedTranslation = postProcessed,
-                            lenA = textA.length,
-                            lenB = textB.length,
-                            delimiter = delimiter,
-                        )
-                        current.translation = transA
-                        next.translation = transB
-                        i += 2
-                    }
-                }
-
-                if (!paired) {
-                    val cleanText = ComicTextPreprocessor.preprocessOcrBlockText(current.text)
-                    val prepared = ComicTextPreprocessor.prepareForNmt(cleanText, fromLang)
-                    val rawTranslated = Tasks.await(translator.translate(prepared))
-                    val postProcessed = ComicTextPreprocessor.postProcessNmtOutput(
-                        sourceText = cleanText,
-                        translatedText = rawTranslated,
-                        toLang = toLang,
-                    )
-                    current.translation = postProcessed
-                    i += 1
-                }
+            for (block in page.blocks) {
+                val cleanText = ComicTextPreprocessor.preprocessOcrBlockText(block.text)
+                if (cleanText.isBlank()) continue
+                val prepared = ComicTextPreprocessor.prepareForNmt(cleanText, fromLang)
+                val rawTranslated = Tasks.await(translator.translate(prepared))
+                val postProcessed = ComicTextPreprocessor.postProcessNmtOutput(
+                    sourceText = cleanText,
+                    translatedText = rawTranslated,
+                    toLang = toLang,
+                )
+                block.translation = postProcessed
             }
 
             // Filter out blocks marked as "RTMTH" or blank

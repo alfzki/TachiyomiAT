@@ -29,6 +29,27 @@ object ComicTextPreprocessor {
             return true
         }
 
+        // Pseudo-hex / zero-heavy background pattern noise
+        val pseudoHexNoiseChars = setOf('0', 'o', 'O', 'e', 'E', 's', 'S', 'd', 'D', '4', ' ')
+        if (trimmed.all { it in pseudoHexNoiseChars } && trimmed.count { it == '0' } >= 3) {
+            return true
+        }
+
+        if (trimmed.length >= 4) {
+            val nonWhitespace = trimmed.filterNot { it.isWhitespace() }
+            if (nonWhitespace.isNotEmpty()) {
+                val digitCount = nonWhitespace.count { it.isDigit() }
+                if (digitCount.toFloat() / nonWhitespace.length.toFloat() >= 0.40f) {
+                    val hasDigitContextWord = Regex(
+                        "(?i)\\b(?:chapter|ch|volume|vol|page|lvl|level|hp|mp|exp|episode|ep|season|part|pt|rank|years?|number|no|am|pm|days?|hours?|mins?|minutes?|secs?|seconds?)\\b",
+                    ).containsMatchIn(trimmed)
+                    if (!hasDigitContextWord) {
+                        return true
+                    }
+                }
+            }
+        }
+
         // Obvious website watermarks / scanlation URLs
         val urlPattern =
             Regex(
@@ -58,6 +79,31 @@ object ComicTextPreprocessor {
             .replace('\n', ' ')
             .replace(Regex("\\s+"), " ")
             .trim()
+    }
+
+    private fun replacePreservingCase(text: String, pattern: String, replacementUpper: String): String {
+        val regex = Regex(pattern, RegexOption.IGNORE_CASE)
+        return regex.replace(text) { match ->
+            val matched = match.value
+            val letters = matched.filter { it.isLetter() }
+            when {
+                letters.isNotEmpty() && letters.all { it.isUpperCase() } -> replacementUpper
+                letters.isNotEmpty() && letters.all { it.isLowerCase() } -> replacementUpper.lowercase()
+                matched.firstOrNull()?.isUpperCase() == true -> {
+                    val words = replacementUpper.split(" ")
+                    words.joinToString(" ") { word ->
+                        if (word.isNotEmpty()) {
+                            word.lowercase().replaceFirstChar {
+                                if (it.isLowerCase()) it.titlecase() else it.toString()
+                            }
+                        } else {
+                            ""
+                        }
+                    }
+                }
+                else -> replacementUpper
+            }
+        }
     }
 
     fun fixCommonComicOcrTypos(text: String): String {
@@ -105,6 +151,80 @@ object ComicTextPreprocessor {
         // 0/1 inside uppercase words
         result = result.replace(Regex("(?<=[A-Z])0(?=[A-Z])"), "O")
             .replace(Regex("(?<=[A-Z])1(?=[A-Z])"), "I")
+
+        // Missing-apostrophe contractions
+        result = replacePreservingCase(result, "\\bDONT\\b", "DON'T")
+        result = replacePreservingCase(result, "\\bDOESNT\\b", "DOESN'T")
+        result = replacePreservingCase(result, "\\bDIDNT\\b", "DIDN'T")
+        result = replacePreservingCase(result, "\\bCANT\\b", "CAN'T")
+        result = replacePreservingCase(result, "\\bWONT\\b", "WON'T")
+        result = replacePreservingCase(result, "\\bISNT\\b", "ISN'T")
+        result = replacePreservingCase(result, "\\bARENT\\b", "AREN'T")
+        result = replacePreservingCase(result, "\\bWASNT\\b", "WASN'T")
+        result = replacePreservingCase(result, "\\bWERENT\\b", "WEREN'T")
+        result = replacePreservingCase(result, "\\bHAVENT\\b", "HAVEN'T")
+        result = replacePreservingCase(result, "\\bHASNT\\b", "HASN'T")
+        result = replacePreservingCase(result, "\\bHADNT\\b", "HADN'T")
+        result = replacePreservingCase(result, "\\bYOURE\\b", "YOU'RE")
+        result = replacePreservingCase(result, "\\bTHEYRE\\b", "THEY'RE")
+        result = replacePreservingCase(result, "\\bTHEYVE\\b|\\bTHEYVB\\b", "THEY'VE")
+        result = replacePreservingCase(result, "\\bTHEYLL\\b", "THEY'LL")
+        result = replacePreservingCase(result, "\\bYOULL\\b", "YOU'LL")
+        result = replacePreservingCase(result, "\\bTHATS\\b", "THAT'S")
+        result = replacePreservingCase(result, "\\bWHATS\\b", "WHAT'S")
+        result =
+            replacePreservingCase(
+                result,
+                "\\bLTS\\s+(?=THE\\b|A\\b|AN\\b|GO\\b|NOT\\b|ONLY\\b|JUST\\b|TOO\\b|SO\\b|VERY\\b|PRETTY\\b)",
+                "IT'S ",
+            )
+
+        // Comic / manhua / martial arts OCR stroke confusions
+        result = replacePreservingCase(result, "\\bOTHEER\\b", "OTHER")
+        result = replacePreservingCase(result, "\\bSBGTS\\b|\\bSEGTS\\b", "SECTS")
+        result = replacePreservingCase(result, "\\bSEGT\\b", "SECT")
+        result = replacePreservingCase(result, "\\bDISGIPLES\\b|\\bDICIPLES\\b", "DISCIPLES")
+        result = replacePreservingCase(result, "\\bDISGIPLE\\b|\\bDICIPLE\\b", "DISCIPLE")
+        result = replacePreservingCase(result, "\\bSTL\\b|\\bSTIL\\b", "STILL")
+        result = replacePreservingCase(result, "\\bEXUEND\\b", "EXTEND")
+        result = replacePreservingCase(result, "\\bFRENDSHIP\\b", "FRIENDSHIP")
+        result = replacePreservingCase(result, "\\bFRENDS\\b", "FRIENDS")
+        result = replacePreservingCase(result, "\\bFREND\\b", "FRIEND")
+        result = replacePreservingCase(result, "\\bPAVLION\\b", "PAVILION")
+        result = replacePreservingCase(result, "\\bMEAVEN\\b", "HEAVEN")
+        result = replacePreservingCase(result, "\\bAIGH\\s+HEAVEN\\b", "HIGH HEAVEN")
+        result = replacePreservingCase(result, "\\bSPECAL\\b", "SPECIAL")
+        result = replacePreservingCase(result, "\\bREQURED\\b", "REQUIRED")
+        result = replacePreservingCase(result, "\\bTO\\s+TRAN\\b", "TO TRAIN")
+        result = replacePreservingCase(result, "\\bNAMB\\b", "NAME")
+        result = replacePreservingCase(result, "\\bEVIGT\\b", "EVICT")
+        result =
+            replacePreservingCase(
+                result,
+                "(?U)\\b(?<=EVICT\\s|EVIGT\\s|TO\\s|LET\\s|GIVE\\s|TELL\\s|WITH\\s|FOR\\s|HELP\\s|BEAT\\s|SAVING\\s)MB\\b",
+                "ME",
+            )
+        result = replacePreservingCase(result, "\\bBEFOR[ÉÈÊéèê](?=[^a-zA-Z0-9]|$)", "BEFORE")
+        result = replacePreservingCase(result, "\\bOBMOUSLY\\b", "OBVIOUSLY")
+        result = replacePreservingCase(result, "\\bCAPPEN\\b", "HAPPEN")
+        result = replacePreservingCase(result, "\\bCOMPORT\\b", "COMFORT")
+        result = replacePreservingCase(result, "\\bITIS\\b", "IT IS")
+        result = replacePreservingCase(result, "\\bMISSEDA\\b", "MISSED A")
+        result = replacePreservingCase(result, "\\bUPA\\s+(?=BIT\\b|LITTLE\\b|LOT\\b)", "UP A ")
+        result = replacePreservingCase(result, "\\bBEDEMOTED\\b", "BE DEMOTED")
+        result = replacePreservingCase(result, "\\bTOTRIAL\\b", "TO TRIAL")
+        result =
+            replacePreservingCase(
+                result,
+                "(?U)\\b(?<=OF\\s|IN\\s|FOR\\s|WITH\\s|FROM\\s)TS\\s+(?=DISCIPLES\\b|MEMBERS\\b|RULES\\b|POWER\\b|SECT\\b)",
+                "ITS ",
+            )
+        result = result.replace(Regex("([A-Za-z]{2,})ooo\\b"), "$1...")
+        result = replacePreservingCase(result, "\\bYANG\\s+KA\\b", "YANG KAI")
+        result = replacePreservingCase(result, "\\bMORNINGI\\b", "MORNING")
+        result = replacePreservingCase(result, "\\bTRYNG\\b", "TRYING")
+        result = replacePreservingCase(result, "\\bCONMPARED\\b", "COMPARED")
+        result = replacePreservingCase(result, "\\bNON\\s+EXISTENT\\b", "NON-EXISTENT")
 
         return result
     }
@@ -179,6 +299,8 @@ object ComicTextPreprocessor {
         var result = translatedText.trim()
         if (result.isEmpty() || result.equals("RTMTH", ignoreCase = true)) return result
 
+        result = result.replace(Regex("^[-–—]+\\s*"), "").replace(Regex("\\s+[-–—]+$"), "").trim()
+
         if (toLang == TextTranslatorLanguage.INDONESIAN) {
             // Hunter
             if (Regex("(?i)\\bhunters?\\b").containsMatchIn(sourceText)) {
@@ -218,6 +340,12 @@ object ComicTextPreprocessor {
             if (Regex("(?i)\\bawakening\\b").containsMatchIn(sourceText)) {
                 result = result.replace(Regex("(?i)\\bkebangkitan\\b"), "Awakening")
             }
+            // Tempered Body
+            if (Regex("(?i)\\btempered\\s+body\\b").containsMatchIn(sourceText)) {
+                result = result.replace(Regex("(?i)\\btubuh\\s+yang\\s+marah\\b"), "Tempered Body")
+                    .replace(Regex("(?i)\\btubuh\\s+marah\\s+tubuh\\s+marah\\b"), "Tempered Body")
+                    .replace(Regex("(?i)\\btubuh\\s+marah\\b"), "Tempered Body")
+            }
         }
 
         return result
@@ -234,7 +362,7 @@ object ComicTextPreprocessor {
             val parts = trimmed.split(delimiter, limit = 2)
             return parts[0].trim() to parts[1].trim()
         }
-        for (alt in listOf(" -- ", "--", " || ", "||", " | ", "|", " <#> ", "<#>", " // ", "//")) {
+        for (alt in listOf(" -- ", "--", " || ", "||", " | ", "|", " <#> ", "<#>", " // ", "//", " - ", " — ", " – ")) {
             if (trimmed.contains(alt)) {
                 val parts = trimmed.split(alt, limit = 2)
                 return parts[0].trim() to parts[1].trim()
