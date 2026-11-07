@@ -26,4 +26,24 @@
     <string name="action_show_translations">Show translations</string>
     <string name="action_hide_translations">Hide translations</string>
     <string name="pref_translate_from_auto">Auto Detect</string>
+
+    <!-- Reader Translation Settings & Profiles -->
+    <string name="pref_category_translation">Translation</string>
+    <string name="pref_translation_profile_active">Active Profile</string>
+    <string name="pref_translation_profile_cjk">CJK (Korean/Japanese/Chinese)</string>
+    <string name="pref_translation_profile_latin">Latin (Spanish/Indonesian/English)</string>
+    <string name="pref_translation_no_translations">No translations available for this chapter</string>
+    <string name="action_delete_bubble">Delete bubble</string>
+    <string name="pref_cloud_api_key">Google Cloud API Key</string>
+    <string name="pref_cloud_api_key_summary">Your Google Cloud Translation API Key</string>
+    <string name="pref_cloud_detection_method">Language Detection Method</string>
+    <string name="pref_text_margin">Text Margin</string>
+    <string name="pref_padding_multiplier">Padding Multiplier</string>
+    <string name="pref_oval_height_margin">Oval Height Margin</string>
+    <string name="pref_reset_defaults">Reset to Defaults</string>
+    <string name="pref_translation_text_margin">Text Margin</string>
+    <string name="pref_translation_padding">Padding Multiplier</string>
+    <string name="pref_translation_oval_height">Oval Height %</string>
+    <string name="pref_translation_h_padding">Horizontal Padding</string>
+    <string name="pref_translation_v_padding">Vertical Padding</string>
 </resources>
